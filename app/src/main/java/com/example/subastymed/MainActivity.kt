@@ -9,8 +9,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.filled.AddCircle
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
@@ -31,7 +32,12 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.example.subastymed.ui.theme.BidsScreen
+import com.example.subastymed.ui.theme.CreateAuctionScreen
+import com.example.subastymed.ui.theme.HomeScreen
+import com.example.subastymed.ui.theme.ProfileScreen
 import com.example.subastymed.ui.theme.SubastyMedTheme
+import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.delay
 
 class MainActivity : ComponentActivity() {
@@ -69,7 +75,7 @@ fun RootNavigation() {
 fun SplashScreen(navController: NavHostController) {
     // Pasa a la pantalla principal después de 2.5 segundos
     LaunchedEffect(key1 = true) {
-        delay(2500)
+        delay(2500.milliseconds)
         navController.navigate("main") {
             popUpTo("splash") { inclusive = true }
         }
@@ -141,11 +147,7 @@ fun MainAppScreen() {
             // Aquí mandamos a llamar a la función que guardaste en HomeScreen.kt
             composable("inicio") { HomeScreen() }
 
-            composable("buscar") {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("Pantalla de Búsqueda", color = Color.White)
-                }
-            }
+            composable("crear") { CreateAuctionScreen() }
             composable("pujas") { BidsScreen() }
 
             composable("perfil") { ProfileScreen() }
@@ -158,8 +160,8 @@ fun MainAppScreen() {
 fun BottomNavigationBar(navController: NavHostController) {
     val items = listOf(
         Triple("Inicio", Icons.Default.Home, "inicio"),
-        Triple("Buscar", Icons.Default.Search, "buscar"),
-        Triple("Mis Pujas", Icons.Default.List, "pujas"),
+        Triple("Crear", Icons.Default.AddCircle, "crear"),
+        Triple("Mis Pujas", Icons.AutoMirrored.Filled.List, "pujas"),
         Triple("Perfil", Icons.Default.Person, "perfil")
     )
 

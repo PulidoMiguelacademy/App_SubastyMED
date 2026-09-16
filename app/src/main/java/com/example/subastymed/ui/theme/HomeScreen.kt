@@ -1,7 +1,8 @@
-package com.example.subastymed
+package com.example.subastymed.ui.theme
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -15,6 +16,8 @@ import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -24,16 +27,17 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.subastymed.R
+import com.example.subastymed.model.AuctionItem
+import com.example.subastymed.viewmodel.HomeViewModel
 
 @Composable
-fun HomeScreen() {
-    // Aquí es donde vinculas el nombre de la imagen (ej: R.drawable.img_macbook)
-    val subastas = listOf(
-        AuctionItem("MacBook Pro 16\" M4", "Excelente estado, 32GB...", "$1,250.00", "02h 15m", "14 pujas", R.drawable.img_macbook),
-        AuctionItem("BMW Serie 3 2021", "Impecable, 35,000 km", "$24,800.00", "1d 04h", "45 pujas", R.drawable.img_bmw),
-        AuctionItem("Chaqueta Cuero Retro", "Vintage, Talla L, Unisex", "$180.00", "45m 12s", "8 pujas", R.drawable.img_chaqueta),
-        AuctionItem("Oleo Abstracto", "Autor firmado, 120x80cm", "$620.00", "05h 22m", "10 pujas", R.drawable.img_oleo)
-    )
+fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
+    // Escuchamos los estados del ViewModel
+    val subastas by viewModel.filteredAuctions.collectAsState()
+    val searchQuery by viewModel.searchQuery.collectAsState()
+    val selectedCategory by viewModel.selectedCategory.collectAsState()
 
     LazyVerticalGrid(
         columns = GridCells.Fixed(2),
@@ -43,8 +47,21 @@ fun HomeScreen() {
         modifier = Modifier.fillMaxSize().background(Color(0xFF0F172A))
     ) {
         item(span = { GridItemSpan(2) }) { TopHeader() }
-        item(span = { GridItemSpan(2) }) { SearchBar() }
-        item(span = { GridItemSpan(2) }) { CategoryChips() }
+
+        item(span = { GridItemSpan(2) }) {
+            SearchBar(
+                query = searchQuery,
+                onQueryChange = { viewModel.onSearchQueryChanged(it) }
+            )
+        }
+
+        item(span = { GridItemSpan(2) }) {
+            CategoryChips(
+                selectedCategory = selectedCategory,
+                onCategorySelected = { viewModel.onCategorySelected(it) }
+            )
+        }
+
         item(span = { GridItemSpan(2) }) { SectionTitle("Subastas Destacadas") }
 
         items(subastas) { item ->
@@ -61,11 +78,10 @@ fun TopHeader() {
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            // Reemplazamos la caja gris por tu logo
             Image(
-                painter = painterResource(id = R.drawable.logo_subastymed),
+                painter = painterResource(id = R.drawable.logo_subastymed), // Asegúrate de tener este logo en res/drawable
                 contentDescription = "Logo SubastyMED",
-                contentScale = ContentScale.Crop, // Esto asegura que llene el círculo
+                contentScale = ContentScale.Crop,
                 modifier = Modifier
                     .size(40.dp)
                     .clip(CircleShape)
@@ -80,10 +96,10 @@ fun TopHeader() {
 }
 
 @Composable
-fun SearchBar() {
+fun SearchBar(query: String, onQueryChange: (String) -> Unit) {
     OutlinedTextField(
-        value = "",
-        onValueChange = {},
+        value = query,
+        onValueChange = onQueryChange, // Actualiza el estado en el ViewModel al escribir
         placeholder = { Text("Buscar artículos...", color = Color.Gray) },
         leadingIcon = { Icon(Icons.Default.Search, tint = Color.Gray, contentDescription = null) },
         modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
@@ -98,18 +114,20 @@ fun SearchBar() {
 }
 
 @Composable
-fun CategoryChips() {
-    val categories = listOf("Electrónica", "Vehículos", "Hogar", "Arte", "Moda")
+fun CategoryChips(selectedCategory: String, onCategorySelected: (String) -> Unit) {
+    val categories = listOf("Todos", "Electrónica", "Vehículos", "Hogar", "Arte", "Moda")
     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(bottom = 16.dp)) {
         items(categories.size) { index ->
-            val isSelected = index == 0
+            val categoryName = categories[index]
+            val isSelected = categoryName == selectedCategory
             Box(
                 modifier = Modifier
                     .clip(RoundedCornerShape(20.dp))
                     .background(if (isSelected) Color(0xFFFF9800) else Color(0xFF1E293B))
+                    .clickable { onCategorySelected(categoryName) } // Avisa al ViewModel
                     .padding(horizontal = 16.dp, vertical = 8.dp)
             ) {
-                Text(categories[index], color = if (isSelected) Color.White else Color.LightGray)
+                Text(categoryName, color = if (isSelected) Color.White else Color.LightGray)
             }
         }
     }
@@ -135,12 +153,11 @@ fun AuctionCard(item: AuctionItem) {
         modifier = Modifier.fillMaxWidth()
     ) {
         Column {
-            // Reemplazamos la caja oscura por la imagen del producto
             Box(modifier = Modifier.fillMaxWidth().height(120.dp)) {
                 Image(
-                    painter = painterResource(id = item.imageRes), // Carga la imagen de la lista
+                    painter = painterResource(id = item.imageRes),
                     contentDescription = item.title,
-                    contentScale = ContentScale.Crop, // Recorta la imagen para que llene el espacio sin deformarse
+                    contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize()
                 )
 
@@ -152,29 +169,19 @@ fun AuctionCard(item: AuctionItem) {
                         .background(Color.Black.copy(alpha = 0.6f))
                         .padding(horizontal = 8.dp, vertical = 4.dp)
                 ) {
-                    Text(item.time, color = Color.White, fontSize = 12.sp)
+                    Text(item.timeRemaining, color = Color.White, fontSize = 12.sp)
                 }
             }
             Column(modifier = Modifier.padding(12.dp)) {
                 Text(item.title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp, maxLines = 1)
-                Text(item.subtitle, color = Color.Gray, fontSize = 12.sp, maxLines = 1)
+                Text(item.description, color = Color.Gray, fontSize = 12.sp, maxLines = 1)
                 Spacer(modifier = Modifier.height(8.dp))
                 Text("Oferta actual", color = Color.Gray, fontSize = 10.sp)
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                    Text(item.price, color = Color(0xFFFF9800), fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                    Text(item.bids, color = Color(0xFFFF9800), fontSize = 10.sp, modifier = Modifier.background(Color(0xFF2D1F16), RoundedCornerShape(4.dp)).padding(horizontal = 4.dp, vertical = 2.dp))
+                    Text("$${item.currentBid}", color = Color(0xFFFF9800), fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    Text("${item.bidCount} pujas", color = Color(0xFFFF9800), fontSize = 10.sp, modifier = Modifier.background(Color(0xFF2D1F16), RoundedCornerShape(4.dp)).padding(horizontal = 4.dp, vertical = 2.dp))
                 }
             }
         }
     }
 }
-
-// Actualizamos el modelo para que reciba la imagen (imageRes)
-data class AuctionItem(
-    val title: String,
-    val subtitle: String,
-    val price: String,
-    val time: String,
-    val bids: String,
-    val imageRes: Int
-)
