@@ -11,6 +11,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -23,54 +24,87 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import coil.compose.AsyncImage
 import com.example.subastymed.model.BidItem
+import com.example.subastymed.network.RetrofitClient
 import com.example.subastymed.viewmodel.BidsViewModel
 
 @Composable
 fun BidsScreen(viewModel: BidsViewModel = viewModel()) {
     val misPujas by viewModel.filteredBids.collectAsState()
     val selectedFilter by viewModel.selectedFilter.collectAsState()
+    val isLoading by viewModel.isLoading.collectAsState()
+
+    // Recargar datos al entrar
+    LaunchedEffect(Unit) {
+        viewModel.refresh()
+    }
 
     val filters = listOf("Activas", "Ganadas", "Perdidas")
 
-    Column(
+    Box(
         modifier = Modifier
             .fillMaxSize()
             .background(Color(0xFF0F172A))
-            .padding(16.dp)
     ) {
-        Text(
-            text = "Mis Pujas",
-            color = Color.White,
-            fontSize = 24.sp,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(bottom = 16.dp)
-        )
-
-        // Filtros funcionales (Activas, Ganadas, Perdidas)
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp)
         ) {
-            filters.forEach { filterText ->
-                FilterChip(
-                    text = filterText,
-                    isSelected = filterText == selectedFilter,
-                    onClick = { viewModel.onFilterSelected(filterText) },
-                    modifier = Modifier.weight(1f)
-                )
+            Text(
+                text = "Mis Pujas",
+                color = Color.White,
+                fontSize = 24.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(bottom = 16.dp)
+            )
+
+            // Filtros funcionales (Activas, Ganadas, Perdidas)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                filters.forEach { filterText ->
+                    FilterChip(
+                        text = filterText,
+                        isSelected = filterText.equals(selectedFilter, ignoreCase = true),
+                        onClick = { viewModel.onFilterSelected(filterText) },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            if (misPujas.isEmpty() && !isLoading) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "No tienes pujas en la sección '$selectedFilter'",
+                        color = Color.Gray,
+                        fontSize = 14.sp
+                    )
+                }
+            } else {
+                // Lista de Pujas filtradas
+                LazyColumn(
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    items(misPujas) { puja ->
+                        BidCard(item = puja)
+                    }
+                }
             }
         }
 
-        Spacer(modifier = Modifier.height(24.dp))
-
-        // Lista de Pujas filtradas
-        LazyColumn(
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            items(misPujas) { puja ->
-                BidCard(item = puja)
-            }
+        if (isLoading && misPujas.isEmpty()) {
+            CircularProgressIndicator(
+                modifier = Modifier.align(Alignment.Center),
+                color = Color(0xFFFF9800)
+            )
         }
     }
 }
@@ -118,14 +152,29 @@ fun BidCard(item: BidItem) {
                 .padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Image(
-                painter = painterResource(id = item.imageRes),
-                contentDescription = item.title,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier
-                    .size(70.dp)
-                    .clip(RoundedCornerShape(8.dp))
-            )
+            if (!item.imageUrl.isNullOrEmpty()) {
+                val fullUrl = if (item.imageUrl.startsWith("http")) item.imageUrl
+                else "${RetrofitClient.BASE_URL.removeSuffix("/")}${item.imageUrl}"
+                AsyncImage(
+                    model = fullUrl,
+                    contentDescription = item.title,
+                    contentScale = ContentScale.Crop,
+                    placeholder = painterResource(id = item.imageRes),
+                    error = painterResource(id = item.imageRes),
+                    modifier = Modifier
+                        .size(70.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                )
+            } else {
+                Image(
+                    painter = painterResource(id = item.imageRes),
+                    contentDescription = item.title,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .size(70.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                )
+            }
 
             Spacer(modifier = Modifier.width(12.dp))
 

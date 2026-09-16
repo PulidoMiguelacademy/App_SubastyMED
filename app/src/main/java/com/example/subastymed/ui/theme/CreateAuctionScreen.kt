@@ -1,5 +1,11 @@
 package com.example.subastymed.ui.theme
 
+import android.app.DatePickerDialog
+import android.app.TimePickerDialog
+import android.net.Uri
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -9,6 +15,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -26,17 +33,73 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
+import coil.compose.AsyncImage
+import com.example.subastymed.viewmodel.CreateAuctionViewModel
+import java.util.Calendar
 
 @Composable
-fun CreateAuctionScreen() {
-    // Variables de estado para los campos de texto (luego los moveremos al ViewModel)
-    var title by remember { mutableStateOf("") }
-    var description by remember { mutableStateOf("") }
-    var startPrice by remember { mutableStateOf("") }
-    var selectedCategory by remember { mutableStateOf("Bicicletas") }
+fun CreateAuctionScreen(
+    viewModel: CreateAuctionViewModel = viewModel(),
+    onBack: () -> Unit = {}
+) {
+    val context = LocalContext.current
+
+    val title by viewModel.title.collectAsState()
+    val description by viewModel.description.collectAsState()
+    val startPrice by viewModel.startPrice.collectAsState()
+    val selectedCategory by viewModel.selectedCategory.collectAsState()
+    val startDate by viewModel.startDate.collectAsState()
+    val selectedImageUri by viewModel.selectedImageUri.collectAsState()
+    val isSubmitting by viewModel.isSubmitting.collectAsState()
+    val statusMessage by viewModel.statusMessage.collectAsState()
+
+    val photoPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        viewModel.onImageSelected(uri)
+    }
+
+    // Selector secuencial de Fecha y Hora
+    val calendar = Calendar.getInstance()
+    var tempDateStr by remember { mutableStateOf("") }
+
+    val timePickerDialog = TimePickerDialog(
+        context,
+        { _, hourOfDay, minute ->
+            val amPm = if (hourOfDay >= 12) "PM" else "AM"
+            val hour12 = if (hourOfDay % 12 == 0) 12 else hourOfDay % 12
+            val timeFormatted = String.format("%02d:%02d %s", hour12, minute, amPm)
+            val fullDateTime = "$tempDateStr - $timeFormatted"
+            viewModel.setStartDateTime(fullDateTime)
+        },
+        calendar.get(Calendar.HOUR_OF_DAY),
+        calendar.get(Calendar.MINUTE),
+        false
+    )
+
+    val datePickerDialog = DatePickerDialog(
+        context,
+        { _, year, month, dayOfMonth ->
+            tempDateStr = String.format("%02d/%02d/%04d", dayOfMonth, month + 1, year)
+            timePickerDialog.show()
+        },
+        calendar.get(Calendar.YEAR),
+        calendar.get(Calendar.MONTH),
+        calendar.get(Calendar.DAY_OF_MONTH)
+    )
+
+    LaunchedEffect(statusMessage) {
+        statusMessage?.let { msg ->
+            Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -45,38 +108,42 @@ fun CreateAuctionScreen() {
             .verticalScroll(rememberScrollState())
             .padding(16.dp)
     ) {
-        HeaderSection()
+        HeaderSection(onBack = onBack)
 
         Spacer(modifier = Modifier.height(24.dp))
 
         // PASO 1: Categoría
         StepHeader(stepNumber = "1", title = "Categoría", subtitle = "Selecciona la categoría de tu artículo")
         Spacer(modifier = Modifier.height(12.dp))
-        CategorySelector(selectedCategory) { selectedCategory = it }
+        CategorySelector(selectedCategory) { viewModel.selectedCategory.value = it }
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // PASO 2: Fotos
-        StepHeader(stepNumber = "2", title = "Fotos del artículo", subtitle = "Agrega al menos 1 foto (máx. 5)")
+        // PASO 2: Fotos reales con selección de galería
+        StepHeader(stepNumber = "2", title = "Fotos del artículo", subtitle = "Selecciona una foto real de tu galería")
         Spacer(modifier = Modifier.height(12.dp))
-        PhotoUploadBox()
+        PhotoUploadBox(
+            selectedUri = selectedImageUri,
+            onPickImage = { photoPickerLauncher.launch("image/*") },
+            onClearImage = { viewModel.onImageSelected(null) }
+        )
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // Formulario
+        // Formulario de Detalles
         CustomTextField(
             value = title,
-            onValueChange = { title = it },
+            onValueChange = { viewModel.title.value = it },
             label = "Título del artículo",
             placeholder = "Ej: iPhone 14 Pro, Bicicleta de montaña...",
-            icon = Icons.Default.Sell // Reemplazo de icono de etiqueta
+            icon = Icons.Default.Sell
         )
 
         Spacer(modifier = Modifier.height(16.dp))
 
         CustomTextField(
             value = description,
-            onValueChange = { description = it },
+            onValueChange = { viewModel.description.value = it },
             label = "Descripción",
             placeholder = "Describe el estado, características y detalles importantes del artículo...",
             icon = Icons.Default.Description,
@@ -85,58 +152,83 @@ fun CreateAuctionScreen() {
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            Box(modifier = Modifier.weight(1f)) {
-                CustomTextField(
-                    value = startPrice,
-                    onValueChange = { startPrice = it },
-                    label = "Precio inicial",
-                    placeholder = "Ej: 500.000",
-                    icon = Icons.Default.AttachMoney
-                )
-            }
-            Box(modifier = Modifier.weight(1f)) {
-                // Simulación de Dropdown para duración
-                CustomTextField(
-                    value = "",
-                    onValueChange = {},
-                    label = "Duración de la subasta",
-                    placeholder = "Selecciona",
-                    icon = Icons.Default.CalendarToday,
-                    trailingIcon = Icons.Default.KeyboardArrowDown,
-                    readOnly = true
-                )
-            }
+        // Campo Espacioso para Precio Inicial
+        CustomTextField(
+            value = startPrice,
+            onValueChange = { viewModel.startPrice.value = it },
+            label = "Precio inicial ($)",
+            placeholder = "Ej: 2000000",
+            icon = Icons.Default.AttachMoney,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Campo para Fecha y Hora de Inicio con click garantizado por overlay
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+        ) {
+            CustomTextField(
+                value = startDate,
+                onValueChange = {},
+                label = "Fecha y hora de inicio",
+                placeholder = "Toca para configurar fecha y hora",
+                icon = Icons.Default.CalendarToday,
+                trailingIcon = Icons.Default.AccessTime,
+                readOnly = true
+            )
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .clickable { datePickerDialog.show() }
+            )
         }
 
         Spacer(modifier = Modifier.height(32.dp))
 
         // Botón Crear Subasta
         Button(
-            onClick = { /* Lógica de crear subasta */ },
+            onClick = {
+                viewModel.createAuction(context, onSuccess = onBack)
+            },
+            enabled = !isSubmitting,
             modifier = Modifier
                 .fillMaxWidth()
                 .height(56.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF9800)),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = Color(0xFFFF9800),
+                disabledContainerColor = Color(0xFF78350F)
+            ),
             shape = RoundedCornerShape(12.dp)
         ) {
-            Text("Crear subasta", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-            Spacer(modifier = Modifier.width(8.dp))
-            Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = Color.White)
+            if (isSubmitting) {
+                CircularProgressIndicator(
+                    color = Color.White,
+                    modifier = Modifier.size(24.dp)
+                )
+                Spacer(modifier = Modifier.width(12.dp))
+                Text("Subiendo y creando...", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+            } else {
+                Text("Crear subasta", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.width(8.dp))
+                Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = Color.White)
+            }
         }
 
-        Spacer(modifier = Modifier.height(32.dp)) // Espacio para la barra de navegación inferior
+        Spacer(modifier = Modifier.height(32.dp))
     }
 }
 
 @Composable
-fun HeaderSection() {
+fun HeaderSection(onBack: () -> Unit = {}) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically
     ) {
         IconButton(
-            onClick = { /* Volver atrás */ },
+            onClick = onBack,
             modifier = Modifier.background(Color(0xFF1E293B), CircleShape)
         ) {
             Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver", tint = Color.White)
@@ -146,7 +238,6 @@ fun HeaderSection() {
             Text("Crear Subasta", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
             Text("Publica tu artículo y comienza la puja. ¡Es fácil y rápido!", color = Color(0xFF94A3B8), fontSize = 12.sp, lineHeight = 16.sp)
         }
-        // Aquí iría tu imagen del mazo. Usamos un ícono de reemplazo por ahora
         Icon(Icons.Default.Gavel, contentDescription = "Mazo", tint = Color(0xFFFF9800), modifier = Modifier.size(48.dp))
     }
 }
@@ -175,8 +266,8 @@ fun CategorySelector(selectedCategory: String, onCategorySelected: (String) -> U
     val categories = listOf(
         Pair("Bicicletas", Icons.AutoMirrored.Filled.DirectionsBike),
         Pair("Videojuegos", Icons.Default.SportsEsports),
-        Pair("Electrodomés...", Icons.Default.LocalLaundryService), // Acortado para ajustar
-        Pair("Consolas", Icons.Default.Computer),
+        Pair("Electrónica", Icons.Default.Computer),
+        Pair("Vehículos", Icons.Default.DirectionsCar),
         Pair("Otros", Icons.Default.MoreHoriz)
     )
 
@@ -201,32 +292,78 @@ fun CategorySelector(selectedCategory: String, onCategorySelected: (String) -> U
 }
 
 @Composable
-fun PhotoUploadBox() {
-    // Efecto de borde punteado
-    val stroke = Stroke(
-        width = 4f,
-        pathEffect = PathEffect.dashPathEffect(floatArrayOf(20f, 20f), 0f)
-    )
+fun PhotoUploadBox(
+    selectedUri: Uri?,
+    onPickImage: () -> Unit,
+    onClearImage: () -> Unit
+) {
+    if (selectedUri != null) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(180.dp)
+                .clip(RoundedCornerShape(16.dp))
+                .border(2.dp, Color(0xFFFF9800), RoundedCornerShape(16.dp))
+        ) {
+            AsyncImage(
+                model = selectedUri,
+                contentDescription = "Foto seleccionada",
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+            )
 
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(140.dp)
-            .drawBehind {
-                drawRoundRect(
-                    color = Color(0xFF334155),
-                    style = stroke,
-                    cornerRadius = CornerRadius(16.dp.toPx())
-                )
+            Row(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(10.dp)
+            ) {
+                Button(
+                    onClick = onPickImage,
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0F172A).copy(alpha = 0.85f)),
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                ) {
+                    Icon(Icons.Default.Edit, contentDescription = "Cambiar", tint = Color(0xFFFF9800), modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Cambiar", color = Color.White, fontSize = 12.sp)
+                }
+
+                Spacer(modifier = Modifier.width(8.dp))
+
+                IconButton(
+                    onClick = onClearImage,
+                    modifier = Modifier.background(Color(0xFFEF4444).copy(alpha = 0.85f), CircleShape).size(36.dp)
+                ) {
+                    Icon(Icons.Default.Close, contentDescription = "Quitar", tint = Color.White, modifier = Modifier.size(18.dp))
+                }
             }
-            .clickable { /* Abrir galería */ },
-        contentAlignment = Alignment.Center
-    ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(Icons.Default.PhotoCamera, contentDescription = "Cámara", tint = Color(0xFFFF9800), modifier = Modifier.size(40.dp))
-            Spacer(modifier = Modifier.height(8.dp))
-            Text("Toca para añadir fotos", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-            Text("Puedes subir varias imágenes", color = Color(0xFF94A3B8), fontSize = 12.sp)
+        }
+    } else {
+        val stroke = Stroke(
+            width = 4f,
+            pathEffect = PathEffect.dashPathEffect(floatArrayOf(20f, 20f), 0f)
+        )
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(140.dp)
+                .drawBehind {
+                    drawRoundRect(
+                        color = Color(0xFF334155),
+                        style = stroke,
+                        cornerRadius = CornerRadius(16.dp.toPx())
+                    )
+                }
+                .clickable { onPickImage() },
+            contentAlignment = Alignment.Center
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Icon(Icons.Default.PhotoCamera, contentDescription = "Cámara", tint = Color(0xFFFF9800), modifier = Modifier.size(40.dp))
+                Spacer(modifier = Modifier.height(8.dp))
+                Text("Toca para añadir fotos", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                Text("Sube una foto real desde tu galería", color = Color(0xFF94A3B8), fontSize = 12.sp)
+            }
         }
     }
 }
@@ -240,37 +377,48 @@ fun CustomTextField(
     icon: ImageVector,
     trailingIcon: ImageVector? = null,
     isMultiline: Boolean = false,
-    readOnly: Boolean = false
+    readOnly: Boolean = false,
+    keyboardOptions: KeyboardOptions = KeyboardOptions.Default
 ) {
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
         readOnly = readOnly,
+        singleLine = !isMultiline,
+        keyboardOptions = keyboardOptions,
         modifier = Modifier
             .fillMaxWidth()
-            .then(if (isMultiline) Modifier.height(120.dp) else Modifier), // Da más altura si es multilínea
+            .then(if (isMultiline) Modifier.height(120.dp) else Modifier.height(64.dp)),
         shape = RoundedCornerShape(12.dp),
         colors = OutlinedTextFieldDefaults.colors(
             focusedContainerColor = Color(0xFF1E293B),
             unfocusedContainerColor = Color(0xFF1E293B),
-            focusedBorderColor = Color(0xFF334155),
+            focusedBorderColor = Color(0xFFFF9800),
             unfocusedBorderColor = Color(0xFF334155),
             focusedTextColor = Color.White,
-            unfocusedTextColor = Color.White
+            unfocusedTextColor = Color.White,
+            focusedLabelColor = Color(0xFFFF9800),
+            unfocusedLabelColor = Color(0xFF94A3B8)
         ),
-        placeholder = { Text(placeholder, color = Color(0xFF475569), fontSize = 12.sp) },
+        label = { Text(label, fontSize = 13.sp) },
+        placeholder = { Text(placeholder, color = Color(0xFF475569), fontSize = 14.sp) },
         leadingIcon = {
-            // Acomodamos el ícono y el título del campo (label) dentro del TextField
-            Column(modifier = Modifier.padding(start = 16.dp, end = 8.dp), verticalArrangement = Arrangement.Center) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(label, color = Color(0xFF94A3B8), fontSize = 12.sp)
-                }
-            }
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = Color(0xFFFF9800),
+                modifier = Modifier.size(20.dp)
+            )
         },
         trailingIcon = trailingIcon?.let {
-            { Icon(it, contentDescription = null, tint = Color.White) }
+            {
+                Icon(
+                    imageVector = it,
+                    contentDescription = null,
+                    tint = Color(0xFF94A3B8),
+                    modifier = Modifier.size(20.dp)
+                )
+            }
         }
     )
 }

@@ -144,10 +144,18 @@ fun MainAppScreen() {
             startDestination = "inicio",
             modifier = Modifier.padding(innerPadding)
         ) {
-            // Aquí mandamos a llamar a la función que guardaste en HomeScreen.kt
             composable("inicio") { HomeScreen() }
 
-            composable("crear") { CreateAuctionScreen() }
+            composable("crear") {
+                CreateAuctionScreen(
+                    onBack = {
+                        bottomNavController.navigate("inicio") {
+                            popUpTo("inicio") { saveState = true }
+                            launchSingleTop = true
+                        }
+                    }
+                )
+            }
             composable("pujas") { BidsScreen() }
 
             composable("perfil") { ProfileScreen() }
