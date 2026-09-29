@@ -1,6 +1,6 @@
 
-## SubastyMed
-# Primera entrega 
+# SubastyMed
+## Primera entrega 
 <img width="958" height="539" alt="image" src="https://github.com/user-attachments/assets/60197bfa-906a-4849-9dd2-76a64ffe0b31" />
 
 <img width="959" height="539" alt="image" src="https://github.com/user-attachments/assets/f541227a-f3cd-423a-8109-a384bac73f49" />
@@ -13,5 +13,5 @@
 
 <img width="959" height="539" alt="image" src="https://github.com/user-attachments/assets/7c9c4630-1868-4750-9da9-105b4e972ca6" />
 
-# Segunda entrega
+## Segunda entrega
 
