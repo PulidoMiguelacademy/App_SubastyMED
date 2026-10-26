@@ -29,7 +29,7 @@ La aplicación cuenta con sincronización en la nube en tiempo real mediante **F
 - 🔴 **Sala de Subasta en Vivo (Ventana Activa de 1 Hora)**:
   - Cuando llega la fecha y hora programada de una subasta, se habilita automáticamente una sala interactiva en vivo durante **1 hora** con barra de progreso y cuenta regresiva segundo a segundo.
   - **Tablero de Pujas en Tiempo Real**: Todos los usuarios ven al instante quién lidera la subasta (`🏆 GANANDO`), quiénes han sido superados (`SUPERADO`) y el historial de ofertas registradas.
-  - **Ingreso Flexible de Ofertas**: Botones de incremento rápido (`+$20`, `+$50`, `+$100`, `+$500`) y campo numérico libre compatible con formato de miles (`24000`, `24.000`, `24,000`).
+  - **Ingreso Flexible de Ofertas en Pesos Colombianos (COP)**: Botones de incremento rápido (`+$10.000`, `+$20.000`, `+$30.000`, `+$50.000`) y campo numérico libre compatible con formato de miles (`50000`, `50.000`, `1.500.000`).
   - **Regla de Negocio para Creadores**: El usuario que publica una subasta puede monitorear las ofertas en vivo, pero el sistema bloquea que puje sobre su propio artículo.
 - 📊 **Gestión Inteligente de "Mis Pujas"**:
   - Clasificación en tiempo real por usuario en tres pestañas:

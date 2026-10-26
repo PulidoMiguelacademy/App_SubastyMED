@@ -357,7 +357,7 @@ fun AuctionDetailDialog(
     val startMillis = auction.getEffectiveStartTimeMillis()
     val endMillis = auction.getEffectiveEndTimeMillis()
 
-    val minIncrement = if (auction.currentBid >= 1000) 100.0 else 20.0
+    val minIncrement = 10000.0
     var customBidText by remember(auction.currentBid) {
         mutableStateOf((auction.currentBid + minIncrement).toLong().toString())
     }
@@ -924,13 +924,19 @@ fun AuctionInteractiveBidSection(
 
                         Spacer(modifier = Modifier.height(10.dp))
 
-                        // Botones rápidos de incremento (opcionales)
+                        // Botones rápidos de incremento en Pesos Colombianos (COP)
                         val parsedCurrentInput = AuctionItem.parsePriceInput(customBidText)
+                        val copIncrements = listOf(
+                            10000 to "+$10.000",
+                            20000 to "+$20.000",
+                            30000 to "+$30.000",
+                            50000 to "+$50.000"
+                        )
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
-                            listOf(20, 50, 100, 500).forEach { inc ->
+                            copIncrements.forEach { (inc, label) ->
                                 val targetAmount = (auction.currentBid + inc).toLong()
                                 val incVal = targetAmount.toString()
                                 val isSelectedQuick = parsedCurrentInput?.toLong() == targetAmount
@@ -948,9 +954,9 @@ fun AuctionInteractiveBidSection(
                                     modifier = Modifier.weight(1f).height(36.dp)
                                 ) {
                                     Text(
-                                        text = "+$$inc",
+                                        text = label,
                                         color = if (isSelectedQuick) Color(0xFFFF9800) else Color.LightGray,
-                                        fontSize = 11.sp,
+                                        fontSize = 10.sp,
                                         fontWeight = FontWeight.SemiBold,
                                         maxLines = 1,
                                         softWrap = false
@@ -967,7 +973,7 @@ fun AuctionInteractiveBidSection(
                                 onCustomBidChange(newText.filter { ch -> ch.isDigit() || ch == '.' || ch == ',' })
                             },
                             label = { Text("Escribe cualquier monto mayor a ${auction.getDisplayPrice()}", color = Color.Gray, fontSize = 12.sp) },
-                            placeholder = { Text("Ej: 24000 o 24.000", color = Color.DarkGray) },
+                            placeholder = { Text("Ej: 50.000 o 100.000", color = Color.DarkGray) },
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth(),
