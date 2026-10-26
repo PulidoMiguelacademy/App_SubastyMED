@@ -62,6 +62,11 @@ interface ApiService {
         @Query("filter_group") filterGroup: String? = null
     ): List<UserBidDto>
 
+    @POST("api/auth/register")
+    suspend fun register(
+        @Body request: RegisterRequestDto
+    ): LoginResponseDto
+
     @POST("api/auth/login")
     suspend fun login(
         @Body request: LoginRequestDto

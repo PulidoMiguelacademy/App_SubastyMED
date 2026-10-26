@@ -8,11 +8,50 @@ import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import java.io.IOException
 import java.util.concurrent.TimeUnit
+import android.content.Context
+import com.google.gson.Gson
 
 object SessionManager {
-    // Token en memoria para las peticiones autenticadas
+    private const val PREFS_NAME = "subastymed_session"
+    private const val KEY_TOKEN = "auth_token"
+    private const val KEY_USER_JSON = "user_json"
+
     var authToken: String? = null
     var currentUser: UserDto? = null
+
+    fun init(context: Context) {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        authToken = prefs.getString(KEY_TOKEN, null)
+        val userJson = prefs.getString(KEY_USER_JSON, null)
+        if (!userJson.isNullOrEmpty()) {
+            try {
+                currentUser = Gson().fromJson(userJson, UserDto::class.java)
+            } catch (e: Exception) {
+                Log.e("SessionManager", "Error parsing saved user: ${e.message}")
+            }
+        }
+    }
+
+    fun saveSession(context: Context, token: String, user: UserDto) {
+        authToken = token
+        currentUser = user
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.edit()
+            .putString(KEY_TOKEN, token)
+            .putString(KEY_USER_JSON, Gson().toJson(user))
+            .apply()
+    }
+
+    fun clearSession(context: Context) {
+        authToken = null
+        currentUser = null
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.edit().clear().apply()
+    }
+
+    fun isLoggedIn(): Boolean {
+        return !authToken.isNullOrEmpty() && currentUser != null
+    }
 }
 
 object RetrofitClient {

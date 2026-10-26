@@ -63,7 +63,7 @@ fun CreateAuctionScreen(
     val photoPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
-        viewModel.onImageSelected(uri)
+        viewModel.onImageSelected(context, uri)
     }
 
     // Selector secuencial de Fecha y Hora
@@ -101,14 +101,21 @@ fun CreateAuctionScreen(
         }
     }
 
-    Column(
+    Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF0F172A))
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp)
+            .background(Color(0xFF0F172A)),
+        contentAlignment = Alignment.TopCenter
     ) {
-        HeaderSection(onBack = onBack)
+        Column(
+            modifier = Modifier
+                .fillMaxHeight()
+                .widthIn(max = 820.dp)
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp)
+        ) {
+            HeaderSection(onBack = onBack)
 
         Spacer(modifier = Modifier.height(24.dp))
 
@@ -125,7 +132,7 @@ fun CreateAuctionScreen(
         PhotoUploadBox(
             selectedUri = selectedImageUri,
             onPickImage = { photoPickerLauncher.launch("image/*") },
-            onClearImage = { viewModel.onImageSelected(null) }
+            onClearImage = { viewModel.onImageSelected(context, null) }
         )
 
         Spacer(modifier = Modifier.height(24.dp))
@@ -152,17 +159,61 @@ fun CreateAuctionScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Campo Espacioso para Precio Inicial
+        // Campo Espacioso para Precio Inicial (admite puntos y comas)
         CustomTextField(
             value = startPrice,
             onValueChange = { viewModel.startPrice.value = it },
             label = "Precio inicial ($)",
-            placeholder = "Ej: 2000000",
+            placeholder = "Ej: 2.000.000 o 1,500,000",
             icon = Icons.Default.AttachMoney,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text)
         )
 
         Spacer(modifier = Modifier.height(16.dp))
+
+        // Selector rápido: Iniciar Ahora vs Programar Fecha y Hora (Duración: 1 Hora)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Button(
+                onClick = {
+                    val nowCal = Calendar.getInstance()
+                    val amPm = if (nowCal.get(Calendar.HOUR_OF_DAY) >= 12) "PM" else "AM"
+                    val hour12 = if (nowCal.get(Calendar.HOUR_OF_DAY) % 12 == 0) 12 else nowCal.get(Calendar.HOUR_OF_DAY) % 12
+                    val nowStr = String.format(
+                        java.util.Locale.US,
+                        "%02d/%02d/%04d - %02d:%02d %s",
+                        nowCal.get(Calendar.DAY_OF_MONTH),
+                        nowCal.get(Calendar.MONTH) + 1,
+                        nowCal.get(Calendar.YEAR),
+                        hour12,
+                        nowCal.get(Calendar.MINUTE),
+                        amPm
+                    )
+                    viewModel.setStartDateTime(nowStr)
+                    Toast.makeText(context, "La subasta iniciará en vivo de inmediato (1 hora de duración)", Toast.LENGTH_SHORT).show()
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626)),
+                shape = RoundedCornerShape(10.dp),
+                modifier = Modifier.weight(1f).height(42.dp),
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+            ) {
+                Text("🔴 Iniciar Ahora (1h)", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            }
+
+            OutlinedButton(
+                onClick = { datePickerDialog.show() },
+                shape = RoundedCornerShape(10.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFF9800)),
+                modifier = Modifier.weight(1f).height(42.dp),
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+            ) {
+                Text("📅 Programar Hora", color = Color(0xFFFF9800), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            }
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
 
         // Campo para Fecha y Hora de Inicio con click garantizado por overlay
         Box(
@@ -173,7 +224,7 @@ fun CreateAuctionScreen(
             CustomTextField(
                 value = startDate,
                 onValueChange = {},
-                label = "Fecha y hora de inicio",
+                label = "Fecha y hora de inicio (Duración en vivo: 1 Hora)",
                 placeholder = "Toca para configurar fecha y hora",
                 icon = Icons.Default.CalendarToday,
                 trailingIcon = Icons.Default.AccessTime,
@@ -183,6 +234,26 @@ fun CreateAuctionScreen(
                 modifier = Modifier
                     .matchParentSize()
                     .clickable { datePickerDialog.show() }
+            )
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(10.dp))
+                .background(Color(0xFF1E293B))
+                .padding(10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(Icons.Default.Timer, contentDescription = null, tint = Color(0xFFFF9800), modifier = Modifier.size(18.dp))
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = "Al llegar la hora de inicio, la sala de pujas se abrirá en vivo durante 1 hora para todos los usuarios.",
+                color = Color(0xFF94A3B8),
+                fontSize = 11.sp,
+                lineHeight = 15.sp
             )
         }
 
@@ -218,6 +289,7 @@ fun CreateAuctionScreen(
         }
 
         Spacer(modifier = Modifier.height(32.dp))
+        }
     }
 }
 

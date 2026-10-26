@@ -1,24 +1,28 @@
 package com.example.subastymed.ui.theme
 
+import android.content.res.Configuration
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -34,6 +38,15 @@ fun BidsScreen(viewModel: BidsViewModel = viewModel()) {
     val misPujas by viewModel.filteredBids.collectAsState()
     val selectedFilter by viewModel.selectedFilter.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
+
+    val configuration = LocalConfiguration.current
+    val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+    val screenWidth = configuration.screenWidthDp
+    val columns = when {
+        screenWidth >= 900 -> 3
+        screenWidth >= 600 || isLandscape -> 2
+        else -> 1
+    }
 
     // Recargar datos al entrar
     LaunchedEffect(Unit) {
@@ -89,9 +102,12 @@ fun BidsScreen(viewModel: BidsViewModel = viewModel()) {
                     )
                 }
             } else {
-                // Lista de Pujas filtradas
-                LazyColumn(
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                // Lista de Pujas filtradas en cuadrícula responsiva
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(columns),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    modifier = Modifier.fillMaxSize()
                 ) {
                     items(misPujas) { puja ->
                         BidCard(item = puja)
@@ -152,29 +168,19 @@ fun BidCard(item: BidItem) {
                 .padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            if (!item.imageUrl.isNullOrEmpty()) {
-                val fullUrl = if (item.imageUrl.startsWith("http")) item.imageUrl
-                else "${RetrofitClient.BASE_URL.removeSuffix("/")}${item.imageUrl}"
-                AsyncImage(
-                    model = fullUrl,
-                    contentDescription = item.title,
-                    contentScale = ContentScale.Crop,
-                    placeholder = painterResource(id = item.imageRes),
-                    error = painterResource(id = item.imageRes),
-                    modifier = Modifier
-                        .size(70.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                )
-            } else {
-                Image(
-                    painter = painterResource(id = item.imageRes),
-                    contentDescription = item.title,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier
-                        .size(70.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                )
+            val imageModel = remember(item.imageUrl, item.imageRes) {
+                com.example.subastymed.model.AuctionItem.resolveImageModel(item.imageUrl, item.imageRes)
             }
+            AsyncImage(
+                model = imageModel,
+                contentDescription = item.title,
+                contentScale = ContentScale.Crop,
+                placeholder = painterResource(id = item.imageRes),
+                error = painterResource(id = item.imageRes),
+                modifier = Modifier
+                    .size(70.dp)
+                    .clip(RoundedCornerShape(8.dp))
+            )
 
             Spacer(modifier = Modifier.width(12.dp))
 
@@ -213,7 +219,9 @@ fun BidCard(item: BidItem) {
                     text = item.status,
                     color = item.statusTextColor,
                     fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    softWrap = false
                 )
             }
         }

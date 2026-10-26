@@ -1,5 +1,6 @@
 package com.example.subastymed.network
 
+import com.example.subastymed.R
 import com.google.gson.annotations.SerializedName
 
 // --- Modelos de Subasta ---
@@ -62,6 +63,13 @@ data class UserBidDto(
 )
 
 // --- Modelos de Autenticación y Perfil ---
+data class RegisterRequestDto(
+    val username: String,
+    val email: String,
+    @SerializedName("full_name") val fullName: String,
+    val password: String
+)
+
 data class LoginRequestDto(
     @SerializedName("username_or_email") val usernameOrEmail: String,
     val password: String
@@ -74,8 +82,28 @@ data class UserDto(
     @SerializedName("full_name") val fullName: String,
     @SerializedName("avatar_url") val avatarUrl: String?,
     val rating: Double,
-    @SerializedName("member_since") val memberSince: String
-)
+    @SerializedName("member_since") val memberSince: String,
+    val phone: String? = null,
+    val city: String? = null,
+    val bio: String? = null,
+    @SerializedName("id_document") val idDocument: String? = null,
+    @SerializedName("is_verified") val isVerified: Boolean = false,
+    val role: String = "user",
+    val uid: String? = null
+) {
+    val isAdmin: Boolean
+        get() = role.equals("admin", ignoreCase = true) ||
+                email.equals("admin@subastymed.com", ignoreCase = true) ||
+                username.equals("admin", ignoreCase = true)
+
+    fun getResolvedAvatar(): Any {
+        val url = avatarUrl
+        if (url.isNullOrBlank() || url.contains("img_perfil.png")) {
+            return R.drawable.img_perfil
+        }
+        return com.example.subastymed.model.AuctionItem.resolveImageModel(url, R.drawable.img_perfil)
+    }
+}
 
 data class LoginResponseDto(
     @SerializedName("access_token") val accessToken: String,

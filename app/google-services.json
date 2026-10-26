@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "680890377749",
+    "project_id": "subastymed",
+    "storage_bucket": "subastymed.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:680890377749:android:0a2465cb221bd5a3b6901c",
+        "android_client_info": {
+          "package_name": "com.example.subastymed"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCeMhfJO8Gc_lYHnV-aq9Ojy6ga9fdcQYw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -30,7 +30,7 @@ class CreateAuctionViewModel : ViewModel() {
     // Fecha y hora de inicio formateada
     private val nowFormatted: String
         get() {
-            val sdf = SimpleDateFormat("dd/MM/yyyy - hh:mm a", Locale.getDefault())
+            val sdf = SimpleDateFormat("dd/MM/yyyy - hh:mm a", Locale.US)
             return sdf.format(Date())
         }
 
@@ -46,8 +46,32 @@ class CreateAuctionViewModel : ViewModel() {
     private val _statusMessage = MutableStateFlow<String?>(null)
     val statusMessage: StateFlow<String?> = _statusMessage.asStateFlow()
 
+    // Ruta absoluta persistente en el almacenamiento interno privado del celular
+    var persistentImagePath: String? = null
+        private set
+
     fun onImageSelected(uri: Uri?) {
         _selectedImageUri.value = uri
+    }
+
+    fun onImageSelected(context: Context, uri: Uri?) {
+        _selectedImageUri.value = uri
+        if (uri == null) {
+            persistentImagePath = null
+            return
+        }
+        try {
+            val file = java.io.File(context.filesDir, "subasta_${System.currentTimeMillis()}.jpg")
+            context.contentResolver.openInputStream(uri)?.use { input ->
+                file.outputStream().use { output ->
+                    input.copyTo(output)
+                }
+            }
+            persistentImagePath = file.absolutePath
+            Log.d("CreateAuctionVM", "Imagen persistida localmente en: $persistentImagePath")
+        } catch (e: Exception) {
+            Log.e("CreateAuctionVM", "Error al guardar imagen interna: ${e.message}")
+        }
     }
 
     fun setStartDateTime(newDateTime: String) {
@@ -57,12 +81,11 @@ class CreateAuctionViewModel : ViewModel() {
     fun createAuction(context: Context, onSuccess: () -> Unit) {
         val currentTitle = title.value.trim()
         val currentDesc = description.value.trim()
-        val priceText = startPrice.value.trim()
-            .replace("$", "")
-            .replace(" ", "")
-            .replace(".", "")
-            .replace(",", ".")
-        val price = priceText.toDoubleOrNull()
+        val rawPriceText = startPrice.value.trim().removePrefix("$").trim()
+
+        // Permite ingresar números con puntos y comas (ej. 2.000.000, 1,500,000, 250000)
+        val digits = rawPriceText.filter { it.isDigit() }
+        val price = digits.toDoubleOrNull()
 
         if (currentTitle.isEmpty()) {
             _statusMessage.value = "Por favor ingresa el título del artículo"
@@ -76,20 +99,74 @@ class CreateAuctionViewModel : ViewModel() {
         viewModelScope.launch {
             _isSubmitting.value = true
             _statusMessage.value = null
+
+            val tempId = System.currentTimeMillis().toString()
+            val initialImage = persistentImagePath ?: _selectedImageUri.value?.toString() ?: getFallbackImage(selectedCategory.value)
+
+            // 1. Guardar de forma inmediata y persistente en el dispositivo con precio formateado y foto real
+            val currentUid = com.example.subastymed.network.FirebaseManager.auth.currentUser?.uid
+                ?: com.example.subastymed.network.SessionManager.currentUser?.uid
+                ?: "anonimo"
+            val currentUserName = com.example.subastymed.network.SessionManager.currentUser?.fullName ?: "Usuario"
+
+            val chosenStart = startDate.value.ifEmpty { nowFormatted }
+            val parsedStartMillis = com.example.subastymed.model.AuctionItem.parseDateStringToMillis(chosenStart)
+            val startTimeMillis = if (parsedStartMillis > 0L) parsedStartMillis else System.currentTimeMillis()
+            val endTimeMillis = startTimeMillis + com.example.subastymed.model.AuctionItem.ONE_HOUR_MILLIS
+
+            var cachedAuction = com.example.subastymed.model.AuctionItem(
+                id = tempId,
+                title = currentTitle,
+                description = if (currentDesc.isEmpty()) "Sin descripción detallada" else currentDesc,
+                currentBid = price,
+                bidCount = 0,
+                timeRemaining = chosenStart,
+                category = selectedCategory.value,
+                imageUrl = initialImage,
+                formattedPrice = rawPriceText,
+                creatorId = currentUid,
+                creatorName = currentUserName,
+                status = "Activa",
+                startTimeMillis = startTimeMillis,
+                endTimeMillis = endTimeMillis
+            )
+            com.example.subastymed.model.LocalAuctionCache.addAuction(cachedAuction, isMine = true, userId = currentUid)
+
+            // 2. Guardar en la Nube con Firebase (Cloud Firestore y Storage)
             try {
-                // 1. Asegurar sesión iniciada en FastAPI
+                val fbResult = com.example.subastymed.network.FirebaseManager.createAuction(
+                    context = context,
+                    title = currentTitle,
+                    description = if (currentDesc.isEmpty()) "Sin descripción detallada" else currentDesc,
+                    category = selectedCategory.value,
+                    price = price,
+                    startDate = chosenStart,
+                    imageUri = _selectedImageUri.value,
+                    localImagePath = persistentImagePath,
+                    formattedPrice = rawPriceText
+                )
+                if (fbResult.isSuccess) {
+                    val fbId = fbResult.getOrThrow()
+                    com.example.subastymed.model.LocalAuctionCache.deleteAuction(tempId, currentUid)
+                    cachedAuction = cachedAuction.copy(id = fbId)
+                    Log.d("CreateAuctionVM", "Subasta guardada exitosamente en Firebase: $fbId")
+                }
+            } catch (fbEx: Exception) {
+                Log.w("CreateAuctionVM", "Firebase createAuction aviso: ${fbEx.message}")
+            }
+
+            try {
+                // 3. Intentar sincronizar con Backend FastAPI si está conectado
                 if (SessionManager.authToken == null) {
                     val loginRes = RetrofitClient.apiService.login(
                         LoginRequestDto(
-                            usernameOrEmail = "alejandro",
+                            usernameOrEmail = SessionManager.currentUser?.username ?: "alejandro",
                             password = "password123"
                         )
                     )
-                    SessionManager.authToken = loginRes.accessToken
-                    SessionManager.currentUser = loginRes.user
+                    SessionManager.saveSession(context, loginRes.accessToken, loginRes.user)
                 }
 
-                // 2. Subir imagen al servidor si el usuario seleccionó una foto
                 var serverImageUrl: String? = null
                 val imageUri = _selectedImageUri.value
                 if (imageUri != null) {
@@ -99,15 +176,14 @@ class CreateAuctionViewModel : ViewModel() {
                         serverImageUrl = uploadResponse.url
                         Log.d("CreateAuctionVM", "Imagen subida exitosamente: $serverImageUrl")
                     } catch (uploadErr: Exception) {
-                        Log.e("CreateAuctionVM", "Error al subir imagen: ${uploadErr.message}", uploadErr)
-                        serverImageUrl = getFallbackImage(selectedCategory.value)
+                        Log.e("CreateAuctionVM", "Error al subir imagen al servidor: ${uploadErr.message}")
+                        serverImageUrl = initialImage
                     }
                 } else {
-                    serverImageUrl = getFallbackImage(selectedCategory.value)
+                    serverImageUrl = initialImage
                 }
 
-                // 3. Crear la subasta en la base de datos con la fecha y hora de inicio seleccionada
-                val newAuction = CreateAuctionDto(
+                val newAuctionDto = CreateAuctionDto(
                     title = currentTitle,
                     description = if (currentDesc.isEmpty()) "Sin descripción detallada" else currentDesc,
                     category = selectedCategory.value,
@@ -116,23 +192,32 @@ class CreateAuctionViewModel : ViewModel() {
                     imageUrl = serverImageUrl
                 )
 
-                val response = RetrofitClient.apiService.createAuction(newAuction)
-                Log.d("CreateAuctionVM", "Subasta creada con éxito: id=${response.id}")
+                val response = RetrofitClient.apiService.createAuction(newAuctionDto)
+                Log.d("CreateAuctionVM", "Subasta sincronizada con Backend: id=${response.id}")
 
-                // 4. Limpiar campos
+                // Actualizar item local con ID del servidor
+                com.example.subastymed.model.LocalAuctionCache.deleteAuction(tempId, currentUid)
+                val syncedAuction = cachedAuction.copy(
+                    id = response.id.toString(),
+                    imageUrl = response.imageUrl ?: serverImageUrl,
+                    creatorId = currentUid,
+                    creatorName = currentUserName
+                )
+                com.example.subastymed.model.LocalAuctionCache.addAuction(syncedAuction, isMine = true, userId = currentUid)
+
+                _statusMessage.value = "¡Subasta creada y guardada con éxito!"
+            } catch (e: Exception) {
+                Log.w("CreateAuctionVM", "No se pudo sincronizar con backend (${e.message}), guardada localmente.")
+                _statusMessage.value = "¡Subasta guardada con éxito en tu teléfono!"
+            } finally {
+                // Limpiar campos y navegar
                 title.value = ""
                 description.value = ""
                 startPrice.value = ""
                 _selectedImageUri.value = null
                 startDate.value = nowFormatted
-                _statusMessage.value = "¡Subasta creada con éxito!"
-
-                onSuccess()
-            } catch (e: Exception) {
-                Log.e("CreateAuctionVM", "Error al crear subasta: ${e.message}", e)
-                _statusMessage.value = "Error al crear subasta: ${e.localizedMessage}"
-            } finally {
                 _isSubmitting.value = false
+                onSuccess()
             }
         }
     }

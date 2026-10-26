@@ -40,10 +40,17 @@ import com.example.subastymed.ui.theme.SubastyMedTheme
 import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.delay
 
+import com.example.subastymed.network.SessionManager
+import com.example.subastymed.model.LocalAuctionCache
+import com.example.subastymed.ui.theme.LoginScreen
+import com.example.subastymed.ui.theme.RegisterScreen
+
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        SessionManager.init(applicationContext)
+        LocalAuctionCache.init(applicationContext)
         setContent {
             SubastyMedTheme {
                 Surface(
@@ -65,18 +72,49 @@ fun RootNavigation() {
         composable("splash") {
             SplashScreen(navController = rootNavController)
         }
+        composable("login") {
+            LoginScreen(
+                onLoginSuccess = {
+                    rootNavController.navigate("main") {
+                        popUpTo("login") { inclusive = true }
+                    }
+                },
+                onNavigateToRegister = {
+                    rootNavController.navigate("register")
+                }
+            )
+        }
+        composable("register") {
+            RegisterScreen(
+                onRegisterSuccess = {
+                    rootNavController.navigate("main") {
+                        popUpTo("login") { inclusive = true }
+                    }
+                },
+                onNavigateToLogin = {
+                    rootNavController.popBackStack()
+                }
+            )
+        }
         composable("main") {
-            MainAppScreen()
+            MainAppScreen(
+                onLogout = {
+                    rootNavController.navigate("login") {
+                        popUpTo("main") { inclusive = true }
+                    }
+                }
+            )
         }
     }
 }
 
 @Composable
 fun SplashScreen(navController: NavHostController) {
-    // Pasa a la pantalla principal después de 2.5 segundos
+    // Si ya tiene sesión activa guardada, va a inicio; si no, a login
     LaunchedEffect(key1 = true) {
-        delay(2500.milliseconds)
-        navController.navigate("main") {
+        delay(2000.milliseconds)
+        val destination = if (SessionManager.isLoggedIn()) "main" else "login"
+        navController.navigate(destination) {
             popUpTo("splash") { inclusive = true }
         }
     }
@@ -132,7 +170,7 @@ fun SplashScreen(navController: NavHostController) {
 }
 
 @Composable
-fun MainAppScreen() {
+fun MainAppScreen(onLogout: () -> Unit = {}) {
     val bottomNavController = rememberNavController()
 
     Scaffold(
@@ -158,11 +196,12 @@ fun MainAppScreen() {
             }
             composable("pujas") { BidsScreen() }
 
-            composable("perfil") { ProfileScreen() }
-
+            composable("perfil") {
+                ProfileScreen(onLogout = onLogout)
             }
         }
     }
+}
 
 @Composable
 fun BottomNavigationBar(navController: NavHostController) {

@@ -35,7 +35,30 @@ class HomeViewModel : ViewModel() {
     val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
 
     init {
+        // Carga inmediata desde almacenamiento local en el teléfono
+        val cached = com.example.subastymed.model.LocalAuctionCache.getAllAuctions()
+        if (cached.isNotEmpty()) {
+            _allAuctions.value = cached
+        }
+        listenToFirebaseAuctions()
         fetchAuctionsFromApi()
+    }
+
+    private fun listenToFirebaseAuctions() {
+        try {
+            com.example.subastymed.network.FirebaseManager.listenToAuctions(
+                onUpdate = { fbList ->
+                    if (fbList.isNotEmpty()) {
+                        _allAuctions.value = fbList
+                    }
+                },
+                onError = { err ->
+                    Log.w("HomeViewModel", "Firestore listener: ${err.message}")
+                }
+            )
+        } catch (e: Exception) {
+            Log.w("HomeViewModel", "Error iniciando Firestore listener: ${e.message}")
+        }
     }
 
     // 5. Combina la lista, la búsqueda y la categoría en memoria para filtrado instantáneo
@@ -60,17 +83,22 @@ class HomeViewModel : ViewModel() {
     }
 
     fun refresh() {
+        // Primero refrescamos con lo que hay guardado localmente
+        val localItems = com.example.subastymed.model.LocalAuctionCache.getAllAuctions()
+        if (localItems.isNotEmpty()) {
+            _allAuctions.value = localItems
+        }
         fetchAuctionsFromApi()
     }
 
-    // Carga las subastas desde el Backend FastAPI en Python
+    // Carga las subastas desde el Backend FastAPI en Python o mantiene las locales guardadas
     fun fetchAuctionsFromApi() {
         viewModelScope.launch {
             _isLoading.value = true
             _errorMessage.value = null
             try {
                 val dtoList = RetrofitClient.apiService.getAuctions()
-                val items = dtoList.map { dto ->
+                val serverItems = dtoList.map { dto ->
                     AuctionItem(
                         id = dto.id.toString(),
                         title = dto.title,
@@ -83,14 +111,21 @@ class HomeViewModel : ViewModel() {
                         imageUrl = dto.imageUrl
                     )
                 }
-                _allAuctions.value = items
-                Log.d("HomeViewModel", "Cargadas ${items.size} subastas desde el Backend")
+
+                // Fusionar con subastas locales que no estén en el servidor
+                val myLocal = com.example.subastymed.model.LocalAuctionCache.getAllAuctions()
+                val merged = (myLocal + serverItems).distinctBy { it.id }
+
+                _allAuctions.value = merged
+                com.example.subastymed.model.LocalAuctionCache.saveAllAuctions(merged)
+                Log.d("HomeViewModel", "Cargadas ${merged.size} subastas sincronizadas")
             } catch (e: Exception) {
                 Log.e("HomeViewModel", "Error al conectar con Backend: ${e.message}", e)
-                _errorMessage.value = "No se pudo conectar al servidor: ${e.localizedMessage}"
-                // Si falla la conexión, dejamos datos de respaldo para no romper la vista
-                if (_allAuctions.value.isEmpty()) {
-                    loadMockDataFallback()
+                _errorMessage.value = "Modo sin conexión: mostrando subastas guardadas"
+                // Si falla la conexión, aseguramos cargar lo que está guardado en el teléfono
+                val localItems = com.example.subastymed.model.LocalAuctionCache.getAllAuctions()
+                if (localItems.isNotEmpty()) {
+                    _allAuctions.value = localItems
                 }
             } finally {
                 _isLoading.value = false
@@ -105,14 +140,5 @@ class HomeViewModel : ViewModel() {
             "arte" -> R.drawable.img_oleo
             else -> R.drawable.img_macbook
         }
-    }
-
-    private fun loadMockDataFallback() {
-        _allAuctions.value = listOf(
-            AuctionItem("1", "MacBook Pro 16\" M4", "Excelente estado, 32GB...", 1250.00, 14, "02h 15m", R.drawable.img_macbook, "Electrónica"),
-            AuctionItem("2", "BMW Serie 3 2021", "Impecable, 35,000 km", 24800.00, 45, "1d 04h", R.drawable.img_bmw, "Vehículos"),
-            AuctionItem("3", "Chaqueta Cuero Retro", "Vintage, Talla L, Unisex", 180.00, 8, "45m 12s", R.drawable.img_chaqueta, "Moda"),
-            AuctionItem("4", "Oleo Abstracto", "Autor firmado, 120x80cm", 620.00, 10, "05h 22m", R.drawable.img_oleo, "Arte")
-        )
     }
 }
