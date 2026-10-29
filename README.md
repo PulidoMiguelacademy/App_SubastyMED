@@ -121,3 +121,13 @@ Para revisar las funciones avanzadas de administración, moderación de subastas
 <img width="959" height="539" alt="image" src="https://github.com/user-attachments/assets/7c9c4630-1868-4750-9da9-105b4e972ca6" />
 
 # Segunda entrega
+
+<img width="1600" height="1000" alt="image" src="https://github.com/user-attachments/assets/30bc7631-5ffd-44b3-9a63-be56ba46b1c6" />
+
+<img width="1000" height="1600" alt="image" src="https://github.com/user-attachments/assets/4aeafcfa-a6dc-4338-beb7-9159fd5a26f9" />
+
+<img width="1000" height="1600" alt="image" src="https://github.com/user-attachments/assets/a41516eb-83a4-4fd2-93e9-caa870c22461" />
+
+<img width="1000" height="1600" alt="image" src="https://github.com/user-attachments/assets/e80a177e-08cd-4d3e-a6c6-9be9701b2c5b" />
+
+<img width="1000" height="1600" alt="image" src="https://github.com/user-attachments/assets/11e09fbc-0631-47fb-9d53-6d72d0e1dfff" />
