@@ -42,6 +42,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.example.subastymed.viewmodel.CreateAuctionViewModel
+import com.example.subastymed.network.SessionManager
 import java.util.Calendar
 
 @Composable
@@ -65,6 +66,12 @@ fun CreateAuctionScreen(
     ) { uri: Uri? ->
         viewModel.onImageSelected(context, uri)
     }
+
+    var showEditProfileDialog by remember { mutableStateOf(false) }
+    var currentUserSnapshot by remember { mutableStateOf(SessionManager.currentUser) }
+    val isCredibilityComplete = !currentUserSnapshot?.fullName.isNullOrBlank() &&
+            !currentUserSnapshot?.phone.isNullOrBlank() &&
+            !currentUserSnapshot?.city.isNullOrBlank()
 
     // Selector secuencial de Fecha y Hora
     val calendar = Calendar.getInstance()
@@ -117,7 +124,56 @@ fun CreateAuctionScreen(
         ) {
             HeaderSection(onBack = onBack)
 
-        Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // REQUISITO OBLIGATORIO DE CREDIBILIDAD Y CONFIANZA
+            if (!isCredibilityComplete) {
+                Card(
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF1E293B)),
+                    border = androidx.compose.foundation.BorderStroke(1.5.dp, Color(0xFFEF4444)),
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(18.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Security,
+                            contentDescription = null,
+                            tint = Color(0xFFFF9800),
+                            modifier = Modifier.size(40.dp)
+                        )
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Text(
+                            text = "Requisito Obligatorio de Credibilidad",
+                            color = Color.White,
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.Bold,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = "Para garantizar la seguridad de la comunidad en SubastyMED, los vendedores deben registrar Nombre Completo, Teléfono/WhatsApp y Ciudad antes de publicar un artículo.",
+                            color = Color(0xFFCBD5E1),
+                            fontSize = 12.sp,
+                            lineHeight = 17.sp,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        )
+                        Spacer(modifier = Modifier.height(14.dp))
+                        Button(
+                            onClick = { showEditProfileDialog = true },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF9800)),
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.fillMaxWidth().height(46.dp)
+                        ) {
+                            Icon(Icons.Default.Edit, contentDescription = null, tint = Color.Black)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Completar mis datos ahora", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                        }
+                    }
+                }
+            }
 
         // PASO 1: Categoría
         StepHeader(stepNumber = "1", title = "Categoría", subtitle = "Selecciona la categoría de tu artículo")
@@ -262,7 +318,16 @@ fun CreateAuctionScreen(
         // Botón Crear Subasta
         Button(
             onClick = {
-                viewModel.createAuction(context, onSuccess = onBack)
+                if (!isCredibilityComplete) {
+                    Toast.makeText(
+                        context,
+                        "⚠️ Debes completar Nombre completo, Teléfono y Ciudad en tu perfil antes de publicar.",
+                        Toast.LENGTH_LONG
+                    ).show()
+                    showEditProfileDialog = true
+                } else {
+                    viewModel.createAuction(context, onSuccess = onBack)
+                }
             },
             enabled = !isSubmitting,
             modifier = Modifier
@@ -289,6 +354,29 @@ fun CreateAuctionScreen(
         }
 
         Spacer(modifier = Modifier.height(32.dp))
+        }
+
+        if (showEditProfileDialog) {
+            val profileVm: com.example.subastymed.viewmodel.ProfileViewModel = viewModel()
+            EditProfileDialog(
+                user = currentUserSnapshot,
+                onDismiss = { showEditProfileDialog = false },
+                onSave = { fullName, phone, city, bio, idDocument, newAvatarUri ->
+                    profileVm.updateProfile(
+                        context = context,
+                        fullName = fullName,
+                        phone = phone,
+                        city = city,
+                        bio = bio,
+                        idDocument = idDocument,
+                        newAvatarUri = newAvatarUri
+                    ) {
+                        showEditProfileDialog = false
+                        currentUserSnapshot = SessionManager.currentUser
+                        Toast.makeText(context, "✅ ¡Datos de credibilidad guardados con éxito!", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            )
         }
     }
 }
@@ -339,7 +427,8 @@ fun CategorySelector(selectedCategory: String, onCategorySelected: (String) -> U
         Pair("Bicicletas", Icons.AutoMirrored.Filled.DirectionsBike),
         Pair("Videojuegos", Icons.Default.SportsEsports),
         Pair("Electrónica", Icons.Default.Computer),
-        Pair("Vehículos", Icons.Default.DirectionsCar),
+        Pair("Moda", Icons.Default.Checkroom),
+        Pair("Hogar", Icons.Default.Home),
         Pair("Otros", Icons.Default.MoreHoriz)
     )
 

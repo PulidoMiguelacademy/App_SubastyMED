@@ -22,7 +22,7 @@ class ProfileViewModel : ViewModel() {
     private val _user = MutableStateFlow<UserDto?>(null)
     val user: StateFlow<UserDto?> = _user.asStateFlow()
 
-    private val _stats = MutableStateFlow(UserStatsDto(wonCount = 14, activeBidsCount = 3, favoritesCount = 28))
+    private val _stats = MutableStateFlow(UserStatsDto(wonCount = 0, activeBidsCount = 0, favoritesCount = 0))
     val stats: StateFlow<UserStatsDto> = _stats.asStateFlow()
 
     // Subastas creadas por el usuario
@@ -41,6 +41,10 @@ class ProfileViewModel : ViewModel() {
 
     private val _actionMessage = MutableStateFlow<String?>(null)
     val actionMessage: StateFlow<String?> = _actionMessage.asStateFlow()
+
+    private val _notifications = MutableStateFlow<List<com.example.subastymed.model.AppNotification>>(emptyList())
+    val notifications: StateFlow<List<com.example.subastymed.model.AppNotification>> = _notifications.asStateFlow()
+    private var notifRegistration: com.google.firebase.firestore.ListenerRegistration? = null
 
     init {
         loadUserProfile()
@@ -99,9 +103,45 @@ class ProfileViewModel : ViewModel() {
                     }
                 }
 
+                // Calcular estadísticas 100% reales desde Firestore
+                val targetUid = currentFbUser?.uid ?: SessionManager.currentUser?.uid ?: ""
+                if (targetUid.isNotBlank()) {
+                    try {
+                        val bidsSnap = com.example.subastymed.network.FirebaseManager.firestore
+                            .collection("bids")
+                            .whereEqualTo("bidderId", targetUid)
+                            .get()
+                            .await()
+
+                        val won = bidsSnap.documents.count { doc ->
+                            val s = doc.getString("status") ?: ""
+                            val f = doc.getString("filterGroup") ?: ""
+                            s.equals("Ganada", ignoreCase = true) || f.equals("Ganadas", ignoreCase = true)
+                        }
+                        val active = bidsSnap.documents.count { doc ->
+                            val s = doc.getString("status") ?: ""
+                            val f = doc.getString("filterGroup") ?: ""
+                            s.equals("Ganando", ignoreCase = true) || s.equals("Superado", ignoreCase = true) || f.equals("Activas", ignoreCase = true)
+                        }
+                        _stats.value = UserStatsDto(wonCount = won, activeBidsCount = active, favoritesCount = _myAuctions.value.size)
+                    } catch (statEx: Exception) {
+                        Log.w("ProfileViewModel", "Aviso calculando estadísticas: ${statEx.message}")
+                    }
+
+                    // Escuchar notificaciones reales del usuario
+                    notifRegistration?.remove()
+                    notifRegistration = com.example.subastymed.network.FirebaseManager.listenToNotifications(targetUid) { list ->
+                        _notifications.value = list
+                    }
+                }
+
                 if (SessionManager.authToken != null) {
-                    val statsRes = RetrofitClient.apiService.getUserStats()
-                    _stats.value = statsRes
+                    try {
+                        val statsRes = RetrofitClient.apiService.getUserStats()
+                        if (_stats.value.wonCount == 0 && _stats.value.activeBidsCount == 0) {
+                            _stats.value = statsRes
+                        }
+                    } catch (_: Exception) {}
                 }
             } catch (e: Exception) {
                 Log.e("ProfileViewModel", "Error cargando estadísticas de perfil: ${e.message}")
@@ -275,6 +315,7 @@ class ProfileViewModel : ViewModel() {
                         _myAuctions.value = cloudMine
                         com.example.subastymed.model.LocalAuctionCache.saveMyAuctions(userKey, cloudMine)
                     }
+                    _stats.value = _stats.value.copy(favoritesCount = _myAuctions.value.size)
                 } catch (fbErr: Exception) {
                     Log.w("ProfileViewModel", "Aviso consultando subastas de Firestore: ${fbErr.message}")
                 }
@@ -453,5 +494,10 @@ class ProfileViewModel : ViewModel() {
             "arte" -> R.drawable.img_oleo
             else -> R.drawable.img_macbook
         }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        notifRegistration?.remove()
     }
 }

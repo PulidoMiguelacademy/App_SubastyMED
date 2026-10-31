@@ -63,7 +63,9 @@ data class AuctionItem(
     val startTimeMillis: Long = 0L,
     val endTimeMillis: Long = 0L,
     val highestBidderId: String? = null,
-    val highestBidderName: String? = null
+    val highestBidderName: String? = null,
+    val creatorPhone: String? = null,
+    val highestBidderPhone: String? = null
 ) {
     companion object {
         const val ONE_HOUR_MILLIS = 60 * 60 * 1000L // 1 hora de duración de la subasta

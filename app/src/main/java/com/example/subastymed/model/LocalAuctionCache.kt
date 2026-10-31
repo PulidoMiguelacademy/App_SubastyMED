@@ -27,47 +27,55 @@ object LocalAuctionCache {
         return listOf(
             AuctionItem(
                 id = "1",
-                title = "MacBook Pro 16\" M4",
-                description = "Excelente estado, 32GB RAM, 1TB SSD, cargador original y caja.",
-                currentBid = 1250.00,
+                title = "Bicicleta GW Snake 29\"",
+                description = "Marco de aluminio, frenos hidráulicos, 24 velocidades Shimano, excelente estado.",
+                currentBid = 650000.0,
                 bidCount = 14,
                 timeRemaining = "02h 15m",
-                imageRes = R.drawable.img_macbook,
-                category = "Electrónica",
-                imageUrl = "/uploads/img_macbook.png"
+                imageRes = R.drawable.img_bmw,
+                category = "Bicicletas",
+                imageUrl = "/uploads/img_bmw.png",
+                creatorName = "Carlos Restrepo",
+                creatorPhone = "3004567890"
             ),
             AuctionItem(
                 id = "2",
-                title = "BMW Serie 3 2021",
-                description = "Impecable, 35,000 km, mantenimientos al día en concesionario oficial.",
-                currentBid = 24800.00,
-                bidCount = 45,
-                timeRemaining = "1d 04h",
-                imageRes = R.drawable.img_bmw,
-                category = "Vehículos",
-                imageUrl = "/uploads/img_bmw.png"
+                title = "MacBook Pro 13\" M2",
+                description = "16GB RAM, 512GB SSD, batería al 96%, incluye cargador original.",
+                currentBid = 2850000.0,
+                bidCount = 22,
+                timeRemaining = "01h 30m",
+                imageRes = R.drawable.img_macbook,
+                category = "Electrónica",
+                imageUrl = "/uploads/img_macbook.png",
+                creatorName = "Alejandro Gómez",
+                creatorPhone = "3109876543"
             ),
             AuctionItem(
                 id = "3",
-                title = "Chaqueta Cuero Retro",
-                description = "Vintage, Talla L, Unisex, 100% cuero genuino, acabado clásico.",
-                currentBid = 180.00,
+                title = "Chaqueta de Cuero Retro",
+                description = "100% cuero genuino, unisex, talla M, forro térmico impecable.",
+                currentBid = 180000.0,
                 bidCount = 8,
                 timeRemaining = "45m 12s",
                 imageRes = R.drawable.img_chaqueta,
                 category = "Moda",
-                imageUrl = "/uploads/img_chaqueta.png"
+                imageUrl = "/uploads/img_chaqueta.png",
+                creatorName = "Mariana Henao",
+                creatorPhone = "3123456789"
             ),
             AuctionItem(
                 id = "4",
-                title = "Oleo Abstracto",
-                description = "Autor firmado, 120x80cm, técnica mixta sobre lienzo con detalles dorados.",
-                currentBid = 620.00,
-                bidCount = 10,
+                title = "PlayStation 4 Slim 1TB",
+                description = "Incluye 2 mandos inalámbricos, cable HDMI y 3 juegos físicos.",
+                currentBid = 950000.0,
+                bidCount = 19,
                 timeRemaining = "05h 22m",
                 imageRes = R.drawable.img_oleo,
-                category = "Arte",
-                imageUrl = "/uploads/img_oleo.png"
+                category = "Videojuegos",
+                imageUrl = "/uploads/img_oleo.png",
+                creatorName = "Juan Pulido",
+                creatorPhone = "3145678901"
             )
         )
     }

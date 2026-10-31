@@ -1,5 +1,7 @@
 package com.example.subastymed.ui.theme
 
+import android.net.Uri
+
 import android.content.res.Configuration
 import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
@@ -9,6 +11,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -73,6 +76,22 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
         subastas.find { it.id == snap.id } ?: snap
     }
 
+    // Notificaciones en tiempo real
+    var showNotificationsDialog by remember { mutableStateOf(false) }
+    var notifications by remember { mutableStateOf<List<com.example.subastymed.model.AppNotification>>(emptyList()) }
+    val currentUserId = FirebaseManager.auth.currentUser?.uid ?: SessionManager.currentUser?.uid ?: ""
+
+    DisposableEffect(currentUserId) {
+        if (currentUserId.isNotBlank()) {
+            val reg = FirebaseManager.listenToNotifications(currentUserId) { list ->
+                notifications = list
+            }
+            onDispose { reg.remove() }
+        } else {
+            onDispose { }
+        }
+    }
+
     // Reloj global que actualiza cada segundo las cuentas regresivas de 1 hora
     var nowMillis by remember { mutableLongStateOf(System.currentTimeMillis()) }
     val finalizedIds = remember { mutableStateListOf<String>() }
@@ -115,7 +134,12 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
             verticalArrangement = Arrangement.spacedBy(16.dp),
             modifier = Modifier.fillMaxSize()
         ) {
-            item(span = { GridItemSpan(columns) }) { TopHeader() }
+            item(span = { GridItemSpan(columns) }) {
+                TopHeader(
+                    notificationsCount = notifications.size,
+                    onNotificationsClick = { showNotificationsDialog = true }
+                )
+            }
 
             item(span = { GridItemSpan(columns) }) {
                 SearchBar(
@@ -158,10 +182,20 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
             onDismiss = { selectedAuctionSnapshot = null }
         )
     }
+
+    if (showNotificationsDialog) {
+        NotificationsDialog(
+            notifications = notifications,
+            onDismiss = { showNotificationsDialog = false }
+        )
+    }
 }
 
 @Composable
-fun TopHeader() {
+fun TopHeader(
+    notificationsCount: Int = 0,
+    onNotificationsClick: () -> Unit = {}
+) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -179,8 +213,30 @@ fun TopHeader() {
             Spacer(modifier = Modifier.width(12.dp))
             Text("SubastyMED", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
         }
-        IconButton(onClick = { }, modifier = Modifier.background(Color(0xFF1E293B), CircleShape)) {
-            Icon(Icons.Default.Notifications, contentDescription = "Notificaciones", tint = Color.White)
+        Box {
+            IconButton(
+                onClick = onNotificationsClick,
+                modifier = Modifier.background(Color(0xFF1E293B), CircleShape)
+            ) {
+                Icon(Icons.Default.Notifications, contentDescription = "Notificaciones", tint = Color.White)
+            }
+            if (notificationsCount > 0) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .size(18.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFFFF9800)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = if (notificationsCount > 9) "9+" else notificationsCount.toString(),
+                        color = Color.Black,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.ExtraBold
+                    )
+                }
+            }
         }
     }
 }
@@ -205,7 +261,7 @@ fun SearchBar(query: String, onQueryChange: (String) -> Unit) {
 
 @Composable
 fun CategoryChips(selectedCategory: String, onCategorySelected: (String) -> Unit) {
-    val categories = listOf("Todos", "Electrónica", "Vehículos", "Hogar", "Arte", "Moda", "Bicicletas")
+    val categories = listOf("Todos", "Bicicletas", "Videojuegos", "Electrónica", "Moda", "Hogar", "Otros")
     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(bottom = 16.dp)) {
         items(categories.size) { index ->
             val categoryName = categories[index]
@@ -381,6 +437,24 @@ fun AuctionDetailDialog(
     val leaderName = leadingBid?.bidderName
         ?: auction.highestBidderName
         ?: if (auction.bidCount > 0) "Postor Activo" else "Sin ofertas aún"
+
+    var winnerPhone by remember(auction.id, auction.highestBidderId) {
+        mutableStateOf(auction.highestBidderPhone ?: "")
+    }
+    var creatorPhone by remember(auction.id, auction.creatorId) {
+        mutableStateOf(auction.creatorPhone ?: "")
+    }
+
+    LaunchedEffect(auction.id, auction.highestBidderId, auction.creatorId) {
+        if (winnerPhone.isBlank() && !auction.highestBidderId.isNullOrBlank()) {
+            val (_, phone) = FirebaseManager.getUserContact(auction.highestBidderId)
+            if (phone.isNotBlank()) winnerPhone = phone
+        }
+        if (creatorPhone.isBlank() && !auction.creatorId.isNullOrBlank()) {
+            val (_, phone) = FirebaseManager.getUserContact(auction.creatorId)
+            if (phone.isNotBlank()) creatorPhone = phone
+        }
+    }
 
     val screenWidth = configuration.screenWidthDp
     val isTabletOrWide = screenWidth >= 640
@@ -559,7 +633,10 @@ fun AuctionDetailDialog(
                                 customBidText = customBidText,
                                 onCustomBidChange = { customBidText = it },
                                 isBidding = isBidding,
-                                onPlaceBid = onPlaceBidAction
+                                onPlaceBid = onPlaceBidAction,
+                                winnerPhone = winnerPhone,
+                                creatorPhone = creatorPhone,
+                                currentUserId = currentUserId
                             )
                         }
                     }
@@ -593,7 +670,10 @@ fun AuctionDetailDialog(
                         customBidText = customBidText,
                         onCustomBidChange = { customBidText = it },
                         isBidding = isBidding,
-                        onPlaceBid = onPlaceBidAction
+                        onPlaceBid = onPlaceBidAction,
+                        winnerPhone = winnerPhone,
+                        creatorPhone = creatorPhone,
+                        currentUserId = currentUserId
                     )
 
                     Spacer(modifier = Modifier.height(14.dp))
@@ -715,13 +795,24 @@ fun AuctionProductSummarySection(
 
     Spacer(modifier = Modifier.height(12.dp))
 
-    // Título y Descripción
+    // Título, Vendedor y Descripción
     Text(
         text = auction.title,
         color = Color.White,
         fontSize = 20.sp,
         fontWeight = FontWeight.Bold
     )
+    Spacer(modifier = Modifier.height(2.dp))
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text("✓", color = Color(0xFF4ADE80), fontWeight = FontWeight.Bold, fontSize = 13.sp)
+        Spacer(modifier = Modifier.width(4.dp))
+        Text(
+            text = "Vendedor: ${auction.creatorName ?: "Usuario SubastyMED"} (✓ Verificado)",
+            color = Color(0xFF4ADE80),
+            fontSize = 11.sp,
+            fontWeight = FontWeight.SemiBold
+        )
+    }
     Spacer(modifier = Modifier.height(4.dp))
     Text(
         text = auction.description,
@@ -806,32 +897,166 @@ fun AuctionInteractiveBidSection(
     customBidText: String,
     onCustomBidChange: (String) -> Unit,
     isBidding: Boolean,
-    onPlaceBid: (String) -> Unit
+    onPlaceBid: (String) -> Unit,
+    winnerPhone: String = "",
+    creatorPhone: String = "",
+    currentUserId: String? = null
 ) {
+    val context = LocalContext.current
     when (phase) {
         AuctionPhase.ENDED -> {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(Color(0xFF312E81))
-                    .padding(14.dp),
-                contentAlignment = Alignment.Center
+            Card(
+                shape = RoundedCornerShape(14.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1B4B)),
+                border = BorderStroke(1.dp, Color(0xFF818CF8)),
+                modifier = Modifier.fillMaxWidth()
             ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Column(
+                    modifier = Modifier.padding(14.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
                     Text(
                         text = "🏁 Pujas Cerradas • Subasta Finalizada",
                         color = Color(0xFFA78BFA),
                         fontWeight = FontWeight.Bold,
                         fontSize = 14.sp
                     )
+                    Spacer(modifier = Modifier.height(4.dp))
                     if (hasBids) {
-                        Spacer(modifier = Modifier.height(4.dp))
                         Text(
                             text = "Adjudicada a $leaderName por ${auction.getDisplayPrice()}",
                             color = Color.White,
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.SemiBold
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        // Determinamos los datos de contacto a mostrar
+                        val isWinner = !currentUserId.isNullOrBlank() && currentUserId == auction.highestBidderId
+                        val contactRole = when {
+                            isCreator -> "Ganador de tu subasta"
+                            isWinner -> "Vendedor del artículo"
+                            else -> "Ganador de la subasta"
+                        }
+                        val contactName = when {
+                            isWinner -> auction.creatorName ?: "Vendedor"
+                            else -> leaderName
+                        }
+                        val contactPhone = when {
+                            isWinner -> creatorPhone
+                            else -> winnerPhone
+                        }
+
+                        Card(
+                            shape = RoundedCornerShape(12.dp),
+                            colors = CardDefaults.cardColors(containerColor = Color(0xFF0F172A)),
+                            border = BorderStroke(1.dp, Color(0xFF22C55E).copy(alpha = 0.6f)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text("💬", fontSize = 16.sp)
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = "Coordinación de Entrega y Pago",
+                                        color = Color(0xFF4ADE80),
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Text(
+                                    text = "$contactRole: $contactName",
+                                    color = Color.White,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                if (contactPhone.isNotBlank()) {
+                                    Text(
+                                        text = "Teléfono / WhatsApp: $contactPhone",
+                                        color = Color(0xFFFF9800),
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                } else {
+                                    Text(
+                                        text = "Teléfono: No registrado en el perfil",
+                                        color = Color.Gray,
+                                        fontSize = 12.sp
+                                    )
+                                }
+
+                                Spacer(modifier = Modifier.height(10.dp))
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Button(
+                                        onClick = {
+                                            if (contactPhone.isNotBlank()) {
+                                                val cleanDigits = contactPhone.filter { it.isDigit() }
+                                                val fullNum = if (cleanDigits.length == 10 && !cleanDigits.startsWith("57")) "57$cleanDigits" else cleanDigits
+                                                val msg = "Hola $contactName, te escribo desde SubastyMED respecto a la subasta '${auction.title}' para coordinar entrega y pago."
+                                                val url = "https://api.whatsapp.com/send?phone=$fullNum&text=" + Uri.encode(msg)
+                                                try {
+                                                    val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, Uri.parse(url))
+                                                    context.startActivity(intent)
+                                                } catch (e: Exception) {
+                                                    Toast.makeText(context, "No se pudo abrir WhatsApp", Toast.LENGTH_SHORT).show()
+                                                }
+                                            } else {
+                                                Toast.makeText(context, "El usuario no tiene número registrado", Toast.LENGTH_SHORT).show()
+                                            }
+                                        },
+                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF22C55E)),
+                                        shape = RoundedCornerShape(8.dp),
+                                        modifier = Modifier.weight(1.3f).height(40.dp),
+                                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 4.dp)
+                                    ) {
+                                        Text(
+                                            text = "📲 Contactar por WhatsApp",
+                                            color = Color.White,
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            maxLines = 1
+                                        )
+                                    }
+
+                                    OutlinedButton(
+                                        onClick = {
+                                            if (contactPhone.isNotBlank()) {
+                                                val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                                                val clip = android.content.ClipData.newPlainText("Teléfono", contactPhone)
+                                                clipboard.setPrimaryClip(clip)
+                                                Toast.makeText(context, "✓ Número copiado: $contactPhone", Toast.LENGTH_SHORT).show()
+                                            } else {
+                                                Toast.makeText(context, "No hay número para copiar", Toast.LENGTH_SHORT).show()
+                                            }
+                                        },
+                                        border = BorderStroke(1.dp, Color(0xFFFF9800)),
+                                        shape = RoundedCornerShape(8.dp),
+                                        modifier = Modifier.weight(1f).height(40.dp),
+                                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 4.dp)
+                                    ) {
+                                        Text(
+                                            text = "📋 Copiar Número",
+                                            color = Color(0xFFFF9800),
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            maxLines = 1
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "No se recibieron ofertas durante el tiempo en vivo.",
+                            color = Color.LightGray,
+                            fontSize = 12.sp
                         )
                     }
                 }
@@ -1425,6 +1650,106 @@ fun LiveBidsFeedSection(
                             maxLines = 1,
                             softWrap = false
                         )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun NotificationsDialog(
+    notifications: List<com.example.subastymed.model.AppNotification>,
+    onDismiss: () -> Unit
+) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Card(
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF1E293B)),
+            modifier = Modifier
+                .widthIn(max = 520.dp)
+                .fillMaxWidth(0.94f)
+                .padding(6.dp)
+        ) {
+            Column(modifier = Modifier.padding(18.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Notifications, contentDescription = null, tint = Color(0xFFFF9800), modifier = Modifier.size(22.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Notificaciones (${notifications.size})",
+                            color = Color.White,
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    IconButton(onClick = onDismiss) {
+                        Icon(Icons.Default.Close, contentDescription = "Cerrar", tint = Color.Gray)
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                if (notifications.isEmpty()) {
+                    Box(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 32.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "No tienes notificaciones en este momento.\nAl realizar una puja o crear una subasta recibirás alertas aquí en tiempo real.",
+                            color = Color.Gray,
+                            fontSize = 13.sp,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                            lineHeight = 18.sp
+                        )
+                    }
+                } else {
+                    androidx.compose.foundation.lazy.LazyColumn(
+                        modifier = Modifier.fillMaxWidth().heightIn(max = 420.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        items(notifications) { notif ->
+                            Card(
+                                shape = RoundedCornerShape(10.dp),
+                                colors = CardDefaults.cardColors(containerColor = Color(0xFF0F172A)),
+                                border = BorderStroke(1.dp, Color(0xFF334155)),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Column(modifier = Modifier.padding(12.dp)) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = notif.title,
+                                            color = Color.White,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 13.sp
+                                        )
+                                        Text(
+                                            text = notif.getRelativeTime(),
+                                            color = Color.Gray,
+                                            fontSize = 11.sp
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = notif.message,
+                                        color = Color(0xFFCBD5E1),
+                                        fontSize = 12.sp,
+                                        lineHeight = 16.sp
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }

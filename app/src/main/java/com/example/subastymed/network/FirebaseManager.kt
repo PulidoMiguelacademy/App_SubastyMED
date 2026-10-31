@@ -8,6 +8,7 @@ import androidx.compose.ui.graphics.Color
 import com.example.subastymed.model.AuctionItem
 import com.example.subastymed.model.AuctionPhase
 import com.example.subastymed.model.BidItem
+import com.example.subastymed.model.AppNotification
 import com.example.subastymed.model.LiveBidEntry
 import com.example.subastymed.model.LocalAuctionCache
 import com.google.firebase.auth.FirebaseAuth
@@ -220,7 +221,7 @@ object FirebaseManager {
             }
 
             val finalAvatar = newAvatarUrl ?: current?.avatarUrl ?: "/uploads/img_perfil.png"
-            val isVerified = (!idDocument.isNullOrBlank()) || (!phone.isNullOrBlank() && !city.isNullOrBlank())
+            val isVerified = fullName.isNotBlank() && !phone.isNullOrBlank() && !city.isNullOrBlank()
 
             val updates = hashMapOf<String, Any>(
                 "full_name" to fullName,
@@ -350,6 +351,8 @@ object FirebaseManager {
                             val endTimeMillis = if (rawEnd > 0L) rawEnd else if (startTimeMillis > 0L) startTimeMillis + AuctionItem.ONE_HOUR_MILLIS else 0L
                             val highestBidderId = doc.getString("highestBidderId")
                             val highestBidderName = doc.getString("highestBidderName")
+                            val creatorPhone = doc.getString("creatorPhone")
+                            val highestBidderPhone = doc.getString("highestBidderPhone")
 
                             AuctionItem(
                                 id = id,
@@ -368,7 +371,9 @@ object FirebaseManager {
                                 startTimeMillis = startTimeMillis,
                                 endTimeMillis = endTimeMillis,
                                 highestBidderId = highestBidderId,
-                                highestBidderName = highestBidderName
+                                highestBidderName = highestBidderName,
+                                creatorPhone = creatorPhone,
+                                highestBidderPhone = highestBidderPhone
                             )
                         } catch (e: Exception) {
                             null
@@ -490,6 +495,7 @@ object FirebaseManager {
             val finalImage = downloadUrl ?: base64Fallback ?: localImagePath ?: imageUri?.toString()
             val uid = auth.currentUser?.uid ?: SessionManager.currentUser?.uid ?: SessionManager.currentUser?.username ?: "anonimo"
             val creatorName = SessionManager.currentUser?.fullName ?: "Usuario"
+            val creatorPhone = SessionManager.currentUser?.phone ?: ""
             val parsedStart = AuctionItem.parseDateStringToMillis(startDate)
             val startTimeMillis = if (parsedStart > 0L) parsedStart else System.currentTimeMillis()
             val endTimeMillis = startTimeMillis + AuctionItem.ONE_HOUR_MILLIS
@@ -507,6 +513,7 @@ object FirebaseManager {
                 "status" to "Activa",
                 "creatorId" to uid,
                 "creatorName" to creatorName,
+                "creatorPhone" to creatorPhone,
                 "createdAt" to System.currentTimeMillis(),
                 "startTimeMillis" to startTimeMillis,
                 "endTimeMillis" to endTimeMillis
@@ -529,11 +536,19 @@ object FirebaseManager {
                 formattedPrice = formattedPrice,
                 creatorId = uid,
                 creatorName = creatorName,
+                creatorPhone = creatorPhone,
                 status = "Activa",
                 startTimeMillis = startTimeMillis,
                 endTimeMillis = endTimeMillis
             )
             LocalAuctionCache.addAuction(localItem, isMine = true, userId = uid)
+
+            sendNotification(
+                userId = uid,
+                title = "Subasta Publicada 🚀",
+                message = "Has publicado tu subasta '$title' por ${AuctionItem.formatCurrency(price)}. ¡Ya está disponible!",
+                type = "auction_created"
+            )
 
             Result.success(newId)
         } catch (e: Exception) {
@@ -739,6 +754,8 @@ object FirebaseManager {
                     val endTimeMillis = if (rawEnd > 0L) rawEnd else if (startTimeMillis > 0L) startTimeMillis + AuctionItem.ONE_HOUR_MILLIS else 0L
                     val highestBidderId = doc.getString("highestBidderId")
                     val highestBidderName = doc.getString("highestBidderName")
+                    val creatorPhone = doc.getString("creatorPhone")
+                    val highestBidderPhone = doc.getString("highestBidderPhone")
 
                     AuctionItem(
                         id = id,
@@ -757,7 +774,9 @@ object FirebaseManager {
                         startTimeMillis = startTimeMillis,
                         endTimeMillis = endTimeMillis,
                         highestBidderId = highestBidderId,
-                        highestBidderName = highestBidderName
+                        highestBidderName = highestBidderName,
+                        creatorPhone = creatorPhone,
+                        highestBidderPhone = highestBidderPhone
                     )
                 } catch (e: Exception) {
                     null
@@ -868,7 +887,9 @@ object FirebaseManager {
                 Log.w(TAG, "Aviso guardando evento live_bids: ${liveErr.message}")
             }
 
-            // 2. Marcar pujas previas de otros usuarios para esta subasta como 'Superado' y actualizar maxBid
+            val userPhone = SessionManager.currentUser?.phone ?: ""
+
+            // 2. Marcar pujas previas de otros usuarios para esta subasta como 'Superado' y notificarles
             try {
                 val previousBids = firestore.collection("bids")
                     .whereEqualTo("auctionId", auctionId)
@@ -882,6 +903,12 @@ object FirebaseManager {
                     val prevBidderId = prevDoc.getString("bidderId")
                     if (prevBidderId != uid && prevDoc.getString("status") == "Ganando") {
                         updateMap["status"] = "Superado"
+                        sendNotification(
+                            userId = prevBidderId ?: "",
+                            title = "¡Puja Superada! ⚠️",
+                            message = "Tu oferta en '$title' fue superada. Nueva oferta líder: ${AuctionItem.formatCurrency(amount)}.",
+                            type = "bid_outbid"
+                        )
                     }
                     firestore.collection("bids").document(prevDoc.id).update(updateMap).await()
                 }
@@ -932,7 +959,8 @@ object FirebaseManager {
                 "currentBid" to amount,
                 "bidCount" to bidCount,
                 "highestBidderId" to uid,
-                "highestBidderName" to userName
+                "highestBidderName" to userName,
+                "highestBidderPhone" to userPhone
             )
             if (startTimeMillis == 0L) {
                 auctionUpdates["startTimeMillis"] = now
@@ -947,10 +975,19 @@ object FirebaseManager {
                     currentBid = amount,
                     bidCount = bidCount,
                     highestBidderId = uid,
-                    highestBidderName = userName
+                    highestBidderName = userName,
+                    highestBidderPhone = userPhone
                 )
                 LocalAuctionCache.updateAuction(updated)
             }
+
+            // Notificación al postor
+            sendNotification(
+                userId = uid,
+                title = "Puja Exitosa 🔨",
+                message = "Has realizado una puja de ${AuctionItem.formatCurrency(amount)} en '$title'. ¡Vas ganando!",
+                type = "bid_placed"
+            )
 
             Result.success(Unit)
         } catch (e: Exception) {
@@ -1057,6 +1094,11 @@ object FirebaseManager {
                 .get()
                 .await()
 
+            val auctionTitle = auctionDoc.getString("title") ?: "Subasta"
+            val currentBidVal = auctionDoc.getDouble("currentBid") ?: 0.0
+            val creatorId = auctionDoc.getString("creatorId")
+            val highestBidderName = auctionDoc.getString("highestBidderName") ?: "Ganador"
+
             for (b in bidsQuery.documents) {
                 val bidderId = b.getString("bidderId")
                 if (bidderId == highestBidderId && !highestBidderId.isNullOrEmpty()) {
@@ -1074,6 +1116,28 @@ object FirebaseManager {
                         )
                     ).await()
                 }
+            }
+
+            if (!highestBidderId.isNullOrBlank()) {
+                sendNotification(
+                    userId = highestBidderId,
+                    title = "🏆 ¡Subasta Ganada!",
+                    message = "¡Felicidades! Has ganado '$auctionTitle' con una oferta de ${AuctionItem.formatCurrency(currentBidVal)}. Ya puedes coordinar la entrega y el pago por WhatsApp.",
+                    type = "auction_won"
+                )
+            }
+            if (!creatorId.isNullOrBlank()) {
+                val endMsg = if (!highestBidderId.isNullOrBlank()) {
+                    "Tu subasta '$auctionTitle' finalizó con éxito. Ganador: $highestBidderName por ${AuctionItem.formatCurrency(currentBidVal)}."
+                } else {
+                    "Tu subasta '$auctionTitle' finalizó sin ofertas."
+                }
+                sendNotification(
+                    userId = creatorId,
+                    title = "Subasta Finalizada 🏁",
+                    message = endMsg,
+                    type = "auction_ended"
+                )
             }
 
             Result.success(Unit)
@@ -1143,5 +1207,65 @@ object FirebaseManager {
                     onUpdate(list)
                 }
             }
+    }
+
+    // --- Sistema de Notificaciones en Tiempo Real ---
+    suspend fun sendNotification(userId: String, title: String, message: String, type: String = "info") {
+        if (userId.isBlank()) return
+        try {
+            val notif = hashMapOf(
+                "userId" to userId,
+                "title" to title,
+                "message" to message,
+                "timestamp" to System.currentTimeMillis(),
+                "type" to type
+            )
+            firestore.collection("notifications").add(notif).await()
+        } catch (e: Exception) {
+            Log.w(TAG, "Error guardando notificación: ${e.message}")
+        }
+    }
+
+    fun listenToNotifications(
+        userId: String,
+        onUpdate: (List<AppNotification>) -> Unit
+    ): ListenerRegistration {
+        return firestore.collection("notifications")
+            .whereEqualTo("userId", userId)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    Log.w(TAG, "Error escuchando notificaciones: ${error.message}")
+                    return@addSnapshotListener
+                }
+                if (snapshot != null) {
+                    val list = snapshot.documents.mapNotNull { doc ->
+                        try {
+                            AppNotification(
+                                id = doc.id,
+                                userId = doc.getString("userId") ?: userId,
+                                title = doc.getString("title") ?: "Notificación",
+                                message = doc.getString("message") ?: "",
+                                timestamp = doc.getLong("timestamp") ?: System.currentTimeMillis(),
+                                type = doc.getString("type") ?: "info"
+                            )
+                        } catch (e: Exception) {
+                            null
+                        }
+                    }.sortedByDescending { it.timestamp }
+                    onUpdate(list)
+                }
+            }
+    }
+
+    suspend fun getUserContact(userUid: String): Pair<String, String> {
+        if (userUid.isBlank()) return Pair("Usuario", "")
+        return try {
+            val doc = firestore.collection("users").document(userUid).get().await()
+            val name = doc.getString("full_name") ?: doc.getString("username") ?: "Usuario"
+            val phone = doc.getString("phone") ?: ""
+            Pair(name, phone)
+        } catch (e: Exception) {
+            Pair("Usuario", "")
+        }
     }
 }

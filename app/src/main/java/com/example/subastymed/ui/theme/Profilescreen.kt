@@ -61,6 +61,7 @@ fun ProfileScreen(
     val allUsers by viewModel.allUsers.collectAsState()
     val allAuctions by viewModel.allAuctions.collectAsState()
     val actionMessage by viewModel.actionMessage.collectAsState()
+    val notifications by viewModel.notifications.collectAsState()
 
     // Estados para controlar los diálogos interactivos
     var showEditProfileDialog by remember { mutableStateOf(false) }
@@ -110,11 +111,16 @@ fun ProfileScreen(
 
         Spacer(modifier = Modifier.height(20.dp))
 
-        // 2. Fila de Estadísticas desde Backend (Ganadas, Activas, Favoritos)
+        // 2. Fila de Estadísticas con Datos 100% Reales (Ganadas y Activas)
         StatsRow(
             wonCount = stats.wonCount.toString(),
             activeCount = stats.activeBidsCount.toString(),
-            favoritesCount = stats.favoritesCount.toString()
+            onWonClick = {
+                Toast.makeText(context, "Tienes ${stats.wonCount} subasta(s) ganada(s)", Toast.LENGTH_SHORT).show()
+            },
+            onActiveClick = {
+                Toast.makeText(context, "Tienes ${stats.activeBidsCount} puja(s) activa(s)", Toast.LENGTH_SHORT).show()
+            }
         )
 
         Spacer(modifier = Modifier.height(24.dp))
@@ -922,6 +928,7 @@ fun EditProfileDialog(
     onDismiss: () -> Unit,
     onSave: (fullName: String, phone: String, city: String, bio: String, idDocument: String, avatarUri: Uri?) -> Unit
 ) {
+    val context = LocalContext.current
     var fullName by remember { mutableStateOf(user?.fullName ?: "") }
     var phone by remember { mutableStateOf(user?.phone ?: "") }
     var city by remember { mutableStateOf(user?.city ?: "") }
@@ -1027,11 +1034,11 @@ fun EditProfileDialog(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // Campo Nombre Completo
+                // Campo Nombre Completo (Obligatorio)
                 OutlinedTextField(
                     value = fullName,
                     onValueChange = { fullName = it },
-                    label = { Text("Nombre Completo *", color = Color.Gray) },
+                    label = { Text("Nombre Completo (Obligatorio) *", color = Color(0xFFFF9800), fontWeight = FontWeight.SemiBold) },
                     leadingIcon = { Icon(Icons.Default.Person, contentDescription = null, tint = Color(0xFFFF9800)) },
                     singleLine = true,
                     colors = OutlinedTextFieldDefaults.colors(
@@ -1074,12 +1081,12 @@ fun EditProfileDialog(
 
                 Spacer(modifier = Modifier.height(14.dp))
 
-                // Campo Teléfono / WhatsApp
+                // Campo Teléfono / WhatsApp (Obligatorio)
                 OutlinedTextField(
                     value = phone,
                     onValueChange = { phone = it },
-                    label = { Text("Teléfono / WhatsApp (Opcional)", color = Color.Gray) },
-                    placeholder = { Text("Ej. +57 300 123 4567", color = Color.DarkGray) },
+                    label = { Text("Teléfono / WhatsApp (Obligatorio) *", color = Color(0xFFFF9800), fontWeight = FontWeight.SemiBold) },
+                    placeholder = { Text("Ej. 300 123 4567 (Para contacto de entrega)", color = Color.DarkGray) },
                     leadingIcon = { Icon(Icons.Default.Phone, contentDescription = null, tint = Color(0xFFFF9800)) },
                     singleLine = true,
                     colors = OutlinedTextFieldDefaults.colors(
@@ -1093,11 +1100,11 @@ fun EditProfileDialog(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // Campo Ciudad / Ubicación
+                // Campo Ciudad / Ubicación (Obligatorio)
                 OutlinedTextField(
                     value = city,
                     onValueChange = { city = it },
-                    label = { Text("Ciudad / Ubicación (Opcional)", color = Color.Gray) },
+                    label = { Text("Ciudad / Ubicación (Obligatorio) *", color = Color(0xFFFF9800), fontWeight = FontWeight.SemiBold) },
                     placeholder = { Text("Ej. Medellín, Antioquia", color = Color.DarkGray) },
                     leadingIcon = { Icon(Icons.Default.LocationOn, contentDescription = null, tint = Color(0xFFFF9800)) },
                     singleLine = true,
@@ -1165,8 +1172,17 @@ fun EditProfileDialog(
 
                     Button(
                         onClick = {
-                            if (fullName.trim().isNotBlank()) {
-                                onSave(fullName.trim(), phone.trim(), city.trim(), bio.trim(), idDocument.trim(), newAvatarUri)
+                            val trimmedName = fullName.trim()
+                            val trimmedPhone = phone.trim()
+                            val trimmedCity = city.trim()
+                            if (trimmedName.isBlank() || trimmedPhone.isBlank() || trimmedCity.isBlank()) {
+                                Toast.makeText(
+                                    context,
+                                    "⚠️ Nombre completo, Teléfono y Ciudad son OBLIGATORIOS para la credibilidad de tu perfil.",
+                                    Toast.LENGTH_LONG
+                                ).show()
+                            } else {
+                                onSave(trimmedName, trimmedPhone, trimmedCity, bio.trim(), idDocument.trim(), newAvatarUri)
                             }
                         },
                         modifier = Modifier.weight(1.5f),
@@ -1185,30 +1201,37 @@ fun EditProfileDialog(
 fun StatsRow(
     wonCount: String,
     activeCount: String,
-    favoritesCount: String
+    onWonClick: () -> Unit = {},
+    onActiveClick: () -> Unit = {}
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
+        horizontalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        StatBox(number = wonCount, label = "Ganadas", modifier = Modifier.weight(1f))
-        StatBox(number = activeCount, label = "Activas", modifier = Modifier.weight(1f))
-        StatBox(number = favoritesCount, label = "Favoritos", modifier = Modifier.weight(1f))
+        StatBox(number = wonCount, label = "Ganadas", onClick = onWonClick, modifier = Modifier.weight(1f))
+        StatBox(number = activeCount, label = "Activas", onClick = onActiveClick, modifier = Modifier.weight(1f))
     }
 }
 
 @Composable
-fun StatBox(number: String, label: String, modifier: Modifier = Modifier) {
+fun StatBox(
+    number: String,
+    label: String,
+    onClick: () -> Unit = {},
+    modifier: Modifier = Modifier
+) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = modifier
             .clip(RoundedCornerShape(12.dp))
             .background(Color(0xFF1E293B))
-            .padding(vertical = 16.dp)
+            .border(1.dp, Color(0xFF334155), RoundedCornerShape(12.dp))
+            .clickable { onClick() }
+            .padding(vertical = 14.dp)
     ) {
-        Text(text = number, color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+        Text(text = number, color = Color(0xFFFF9800), fontSize = 20.sp, fontWeight = FontWeight.Bold)
         Spacer(modifier = Modifier.height(4.dp))
-        Text(text = label, color = Color.Gray, fontSize = 12.sp)
+        Text(text = label, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Medium)
     }
 }
 
